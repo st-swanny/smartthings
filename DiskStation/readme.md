@@ -26,25 +26,25 @@ The follow commands are also supported from SmartApps:
 To set up the your Synology Diskstation cameras from Surveillance Station as SmartThings devices, follow these steps:
 
 Set up the SmartApp:
-1. Create a new SmartApp
-2. Enter any values in the required * fields
-3. Click the button "Enable OAuth in Smart App"
-4. Create the Smart App
-5. Copy the code from DiskstationConnect.groovy over the code of your SmartApp
-6. Save and Publish For Me
+* Create a new SmartApp
+* Enter any values in the required * fields
+* Click the button "Enable OAuth in Smart App"
+* Create the Smart App
+* Copy the code from DiskstationConnect.groovy over the code of your SmartApp
+* Save and Publish For Me
 
 Set up the Device Type:
-1. Create a new Device Type
-2. Enter any values in the required * fields
-3. Create the Device Type
-4. Copy the code from DiskstationCamera.groovy over the code of your Device Type
-5. Save and Publish For Me
+* Create a new Device Type
+* Enter any values in the required * fields
+* Create the Device Type
+* Copy the code from DiskstationCamera.groovy over the code of your Device Type
+* Save and Publish For Me
 
 Connect to your DiskStation:
-1. Open your SmartThings application on your iPhone or Android device
-2. Go to My Apps and Choose Diskstation (Connect)
-3. If you don't see it in My Apps, kill the SmartThings application and restart it
-4. Follow the instructions in the App for the rest of the details
+* Open your SmartThings application on your iPhone or Android device
+* Go to My Apps and Choose Diskstation (Connect)
+* If you don't see it in My Apps, kill the SmartThings application and restart it
+* Follow the instructions in the App for the rest of the details
 
 If you add new cameras to your system, go through the Diskstation (Connect) app again to add the new cameras. If you already set up motion detection, you do not need to do it again.
 
