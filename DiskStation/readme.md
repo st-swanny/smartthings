@@ -4,14 +4,10 @@
 Connect to Synology Diskstation / Surveillance Station on your local network and create camera devices for each camera in the Survellance Station application.
 
 Camera devices support the following capabilities:
-- Image Capture
-   Image capture uses the standard take command
-- Motion Detection
-   Motion detection status lasts for a user specified number of minutes past the last motion sent by the Diskstation
-- Record 
-   Using the device button or switch on/off commands to start and stop recording 
-- Refresh
-   Use the refresh button / command when you change presets or patrols
+- Image Capture -- Image capture uses the standard take command
+- Motion Detection -- Motion detection status lasts for a user specified number of minutes past the last motion sent by the Diskstation
+- Record -- Using the device button or switch on/off commands to start and stop recording 
+- Refresh -- Use the refresh button / command when you change presets or patrols
 
 The follow commands are also supported from SmartApps:
 - "left", "right", "up", and "down"
