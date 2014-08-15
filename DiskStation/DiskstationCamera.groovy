@@ -362,6 +362,13 @@ def refresh() {
         
         // clear child command
     	finalizeDiskstationCommand_Child()
+        
+        log.debug "start logging info"
+        log.debug parent.state.cameraPatrols
+        log.debug parent.state.cameraPresets
+        log.debug parent.state.cameraCapabilities
+        log.debug parent.state.SSCameraList
+        log.debug "stop logging info"
     }
 }
 
