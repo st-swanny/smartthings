@@ -543,5 +543,5 @@ def sendDiskstationCommand_Child(commandData) {
 //helper methods
 private getPictureName() {
 	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
-	return device.deviceNetworkId + "_$pictureUuid" + ".jpg"
+	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
 }
