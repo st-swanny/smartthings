@@ -412,9 +412,9 @@ def pollHandler() {
             	tagType: convertTagTypeToString(device),
                 temperature: ((device.temperature*9/5)+32),
                 rssi: ((Math.max(Math.min(device.signaldBm, -60),-100)+100)*100/40).toDouble().round(),
-                presence: ((device.OutOfRange == "true") ? "not present" : "present"),
+                presence: ((device.OutOfRange == true) ? "not present" : "present"),
                 battery: (device.batteryVolt*100/3).toDouble().round(),
-                switch: ((device.lit == "true") ? "on" : "off"),
+                switch: ((device.lit == true) ? "on" : "off"),
                 humidity: (device.cap).toDouble().round(),
                 contact : (tagEventStates[device.eventState] == "Opened") ? "open" : "closed",
                 acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive"
@@ -525,11 +525,7 @@ def postMessage(path, def query) {
             }            
         }
     } catch ( ex ) {
-    	if (resp.status == 500 && resp.data.status.code == 14) {
-        	// untested expiration of token
-    		log.debug "Error, may need to log on again, go to SmartApp and do it!" 
-            atomicState.authToken = null
-       	}
+        //atomicState.authToken = null
         log.trace "error = " + ex
     }
     
