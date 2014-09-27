@@ -88,7 +88,7 @@ void poll() {
 
 def refresh() {
 	log.debug "refresh"
-    parent.pollChild(this)
+    parent.refreshChild(this)
 }
 
 def initialSetup() {

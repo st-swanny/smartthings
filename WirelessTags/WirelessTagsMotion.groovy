@@ -99,6 +99,10 @@ metadata {
 		main(["temperature", "acceleration", "presence", "humidity", "contact"])
 		details(["temperature", "presence", "humidity", "acceleration", "contact", "button", "beep", "refresh", "type", "doorClosed", "setdoorclosed", "rssi", "battery"])
 	}
+    
+    preferences {
+    		input "motionDecay", "number", title: "Motion Rearm Time", description: "Seconds (min 60 for now)", defaultValue: 60, required: true, displayDuringSetup: true
+    }
 }
 
 // parse events into attributes
@@ -131,20 +135,20 @@ void poll() {
 
 def refresh() {
 	log.debug "refresh"
-    parent.pollChild(this)
+    parent.refreshChild(this)
 }
 
 def setMotionModeAccel() {
 	log.debug "set to door"
     def newMode = "door"
-    parent.setMotionMode(this, newMode)
+    parent.setMotionMode(this, newMode, getMotionDecay())
     sendEvent(name: "motionMode", value: newMode)
 }
 
 def setMotionModeDoor() {
 	log.debug "set to accel"
     def newMode = "accel"
-    parent.setMotionMode(this, newMode)
+    parent.setMotionMode(this, newMode, getMotionDecay())
     sendEvent(name: "motionMode", value: newMode)
 }
 
@@ -156,6 +160,17 @@ def setDoorClosedPosition() {
 
 def initialSetup() {
 	sendEvent(name: "motionMode", value: "accel")
+    parent.setMotionMode(this, "accel", getMotionDecay())
+}
+
+def getMotionDecay() {
+	def timer = (settings.motionDecay != null) ? settings.motionDecay.toInteger() : 60
+    return timer
+}
+
+def updated() {
+	log.trace "updated"
+    parent.setMotionMode(this, device.currentState("motionMode")?.stringValue, getMotionDecay())
 }
 
 void generateEvent(Map results)
@@ -168,6 +183,7 @@ void generateEvent(Map results)
             def isDisplayed = true
             
             if (name=="temperature") {
+            	def isChange = isTemperatureStateChange(device, name, value.toString())
             	isDisplayed = isChange
 				sendEvent(name: name, value: value, unit: "F", displayed: isDisplayed)                                     									 
             }

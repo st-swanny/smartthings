@@ -62,6 +62,10 @@ def handleUrlCallback () {
             	case "oor": data = [presence: "not present"]; break
                 case "back_in_range": data = [presence: "present"]; break
                 case "motion_detected": data = [acceleration: "active"]; startMotionTimer(d); break
+                
+                // motion timeout callback is not working currently in WST 
+                // case "motion_timedout": data = [acceleration: "inactive"]; break
+                
                 case "door_opened": data = [contact: "open"]; break
                 case "door_closed": data = [contact: "closed"]; break
                 case "water_detected": data = [water : "wet"]; break                
@@ -71,7 +75,6 @@ def handleUrlCallback () {
             log.trace "callback action = " + data?.toString()
             
             if (data) {
-            	log.trace "updating device"
             	d.generateEvent(data)
             }
         }
@@ -80,8 +83,6 @@ def handleUrlCallback () {
 
 def authPage()
 {
-	log.debug "authPage()"
-
 	if(!atomicState.accessToken)
 	{
 		log.debug "about to create access token"
@@ -129,8 +130,6 @@ def authPage()
 
 def wirelessDeviceList()
 {
-	log.debug "wirelessDeviceList()"
-
 	def availDevices = getWirelessTags()
 
 	def p = dynamicPage(name: "deviceList", title: "Select Your Devices", uninstall: true) {
@@ -146,7 +145,7 @@ def wirelessDeviceList()
             paragraph "The temperature and humidity values can be calibrated using the mytaglist web UI."
         }
         section("Optional Settings", hidden: true, hideable: true) {
-            input "motionOffDelay", "number", title:"Minutes before motion (acceleration) is deactivated:", defaultValue:1
+            input "pollTimer", "number", title:"Minutes between poll updates of the sensors", defaultValue:5
         } 
 	}
 
@@ -155,13 +154,10 @@ def wirelessDeviceList()
 
 def getWirelessTags()
 {
-	log.debug "getting device list"
-
-    def result = pollTagStatus()
+    def result = getTagStatusFromServer()
 
 	def availDevices = [:]
     result?.each { device ->
-    	log.trace device?.name + " " + device?.uuid
         def dni = device?.uuid
         availDevices[dni] = device?.name
     }
@@ -173,14 +169,10 @@ def getWirelessTags()
 
 
 def installed() {
-	log.debug "Installed with settings: ${settings}"
-
 	initialize()
 }
 
 def updated() {
-	log.debug "Updated with settings: ${settings}"
-
 	unsubscribe()
 	initialize()
 }
@@ -201,40 +193,38 @@ def getChildName(def tagInfo) {
 }
 
 def initialize() {
-	log.debug "initialize"
+    
+    unschedule()
     
 	def curDevices = devices.collect { dni ->
 
 		def d = getChildDevice(dni)
+        
+        def tag = atomicState.tags.find { it.uuid == dni }
 
 		if(!d)
-		{
-        	def tag = atomicState.tags.find { it.uuid == dni }
+		{       	
 			d = addChildDevice(getChildNamespace(), getChildName(tag), dni, null, [label:tag?.name])
             d.initialSetup()
-			log.debug "created ${d.displayName} with id $dni"
+			log.debug "created ${d.displayName} $dni"
 		}
 		else
 		{
-			log.debug "found ${d.displayName} with id $dni already exists"
+			log.debug "found ${d.displayName} $dni already exists"
 		}
         
         if (d) { 
         	// configure device
-        	setupCallbacks(d)
-            armMotion(d)
+        	setupCallbacks(d, tag)
         }
 
 		return dni
 	}
 
-	log.debug "have ${curDevices.size()} devices"
-
 	def delete
 	// Delete any that are no longer in settings
 	if(!curDevices)
 	{
-		log.debug "delete devices"
 		delete = getAllChildDevices()
 	}
 	else
@@ -242,12 +232,17 @@ def initialize() {
 		delete = getChildDevices().findAll { !curDevices.contains(it.deviceNetworkId) }
 	}
 
-	log.debug "deleting ${delete.size()} devices"
 	delete.each { deleteChildDevice(it.deviceNetworkId) }
 
 	if (atomicState.tags == null) { atomicState.tags = [:] }
 
 	pollHandler()
+    
+    // set up internal poll timer
+	if (pollTimer == null) pollTimer = 5
+
+	log.trace "setting poll to ${pollTimer}"
+    schedule("0 0/${pollTimer.toInteger()} * * * ?", pollHandler)
 }
 
 def oauthInitUrl()
@@ -393,52 +388,65 @@ def getEventStates() {
 }
 
 def pollHandler() {
+	log.trace "pollHandler"
+	getTagStatusFromServer() 
+    updateAllDevices()
+}
 
-	debugEvent ("in Poll() method.", true)
-	pollTagStatus() 
-    
-    def tagEventStates = getEventStates()
-
+def updateAllDevices() {
 	atomicState.tags.each {device ->
 		def dni = device.uuid
-		//log.debug ("DNI = ${dni}")
-
 		def d = getChildDevice(dni)
 
 		if(d)
 		{
-            // parsing data here
-            def data = [
-            	tagType: convertTagTypeToString(device),
-                temperature: ((device.temperature*9/5)+32),
-                rssi: ((Math.max(Math.min(device.signaldBm, -60),-100)+100)*100/40).toDouble().round(),
-                presence: ((device.OutOfRange == true) ? "not present" : "present"),
-                battery: (device.batteryVolt*100/3).toDouble().round(),
-                switch: ((device.lit == true) ? "on" : "off"),
-                humidity: (device.cap).toDouble().round(),
-                contact : (tagEventStates[device.eventState] == "Opened") ? "open" : "closed",
-                acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive"
-            ]
-			d.generateEvent(data)
+			updateDeviceStatus(device, d)
 		}
 	}
 }
 
-def getPollRateMillis() { return 1 * 30 * 1000 }
+def pollSingle(def child) {
+	log.trace "pollSingle"
+	getTagStatusFromServer() 
+    
+    def device = atomicState.tags.find { it.uuid == child.device.deviceNetworkId }
+    
+    if (device) {
+		updateDeviceStatus(device, child)
+	}
+}
 
-def pollTagStatus()
+def updateDeviceStatus(def device, def d) {
+    def tagEventStates = getEventStates()
+
+    // parsing data here
+    def data = [
+        tagType: convertTagTypeToString(device),
+        temperature: ((device.temperature*9/5)+32),
+        rssi: ((Math.max(Math.min(device.signaldBm, -60),-100)+100)*100/40).toDouble().round(),
+        presence: ((device.OutOfRange == true) ? "not present" : "present"),
+        battery: (device.batteryVolt*100/3).toDouble().round(),
+        switch: ((device.lit == true) ? "on" : "off"),
+        humidity: (device.cap).toDouble().round(),
+        contact : (tagEventStates[device.eventState] == "Opened") ? "open" : "closed",
+        acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive"
+    ]
+    d.generateEvent(data)
+}
+
+def getPollRateMillis() { return 2 * 1000 }
+
+def getTagStatusFromServer()
 {	
 	def timeSince = (atomicState.lastPoll != null) ? now() - atomicState.lastPoll : 1000*1000
     
     if ((atomicState.tags == null) || (timeSince > getPollRateMillis())) {
-    	log.debug "polling children"
-
         def result = postMessage("/ethClient.asmx/GetTagList", null)
         atomicState.tags = result?.d
         atomicState.lastPoll = now()
         
     } else {
-    	log.trace "waiting to refresh from server" + timeSince
+    	log.trace "waiting to refresh from server"
     }
     return atomicState.tags 
 }
@@ -447,24 +455,27 @@ def pollTagStatus()
 // Poll Child is invoked from the Child Device itself as part of the Poll Capability
 def pollChild( child )
 {
-	log.debug "poll child"
-    
-    pollHandler()
+    pollSingle(child)
 
 	return null
 }
 
-def dumpMsg(def string) {
-	def messageString = string.toString()
-    int messageSize = messageString.size() 
-    //log.trace string.toString().substring(600, (messageSize > 900) ? 900 : messageSize)
-	log.trace string.toString().substring(100, (messageSize > 300) ? 300 : messageSize)
-    if (messageSize > 350) {
-    	//log.trace string.toString().substring(350, (messageSize > 550) ? 550 : messageSize)	
+def refreshChild( child )
+{
+	def id = getTagID(child.device.deviceNetworkId)
+    
+    if (id != null) {
+		// PingAllTags didn't reliable update the tag we wanted so just ping the one
+        Map query = [
+            "id": id
+        ]
+        postMessage("/ethClient.asmx/PingTag", query)
+        pollSingle( child )
+    } else {
+    	log.trace "Could not find tag"
     }
-    if (messageSize > 550) {
-    	//log.trace string.toString().substring(550, (messageSize > 750) ? 750 : messageSize)	
-    }
+    
+    return null
 }
 
 def postMessage(path, def query) {
@@ -506,7 +517,7 @@ def postMessage(path, def query) {
             if(resp.status == 200)
             {                
                 if (resp.data) {
-                	log.trace "got data"
+                	log.trace "success"
                     jsonMap = resp.data
             	} else {
             		log.trace "error = " + resp
@@ -532,7 +543,7 @@ def postMessage(path, def query) {
     return jsonMap
 }
 
-def setSingleCallback(Map callback, def type) {
+def setSingleCallback(def tag, Map callback, def type) {
 
 	def parameters = "?type=$type&"
     
@@ -544,6 +555,7 @@ def setSingleCallback(Map callback, def type) {
         	break;
         case "oor": 
         case "back_in_range":
+        case "motion_timedout":
         	// 3 params
         	parameters = parameters + "name={0}&time={1}&id={2}"
         	break;
@@ -553,7 +565,13 @@ def setSingleCallback(Map callback, def type) {
         	break;
         case "motion_detected":
         	// to do, check if PIR type
-        	parameters = parameters + "name={0}&orientchg={1}&x={2}&y={3}&z={4}&id={5}"
+           	if (getTagTypeInfo(tag).isPIR == true) {
+            	// pir
+        		parameters = parameters + "name={0}&time={1}&id={2}"
+            } else {
+            	// standard
+            	parameters = parameters + "name={0}&orientchg={1}&x={2}&y={3}&z={4}&id={5}"
+            }
         	break;    }
     
     String callbackString = """{"url":"${serverUrl}/api/token/${atomicState.accessToken}/smartapps/installations/${app.id}/urlcallback${parameters}","verb":"GET","content":"","disabled":false,"nat":false}"""
@@ -567,13 +585,10 @@ def useExitingCallback(Map callback) {
     return callbackString
 }
 
-def setupCallbacks(def child) {
-	log.trace "callbacks here"
+def setupCallbacks(def child, def tag) {
 	def id = getTagID(child.device.deviceNetworkId)
     
-    if (id != null) {        
-		log.debug "setup callback for " + id
-        
+    if (id != null) {
         Map query = [
             "id": id
         ]
@@ -584,12 +599,12 @@ def setupCallbacks(def child) {
             String message = """{"id":${id},
             	"config":{
                 "__type":"MyTagList.EventURLConfig",
-                "oor":${setSingleCallback(respMap.d?.oor, "oor")},
-                "back_in_range":${setSingleCallback(respMap.d?.back_in_range, "back_in_range")},
+                "oor":${setSingleCallback(tag, respMap.d?.oor, "oor")},
+                "back_in_range":${setSingleCallback(tag, respMap.d?.back_in_range, "back_in_range")},
                 "low_battery":${useExitingCallback(respMap.d?.low_battery)},
-                "motion_detected":${setSingleCallback(respMap.d?.motion_detected, "motion_detected")},
-                "door_opened":${setSingleCallback(respMap.d?.door_opened, "door_opened")},
-                "door_closed":${setSingleCallback(respMap.d?.door_closed, "door_closed")},
+                "motion_detected":${setSingleCallback(tag, respMap.d?.motion_detected, "motion_detected")},
+                "door_opened":${setSingleCallback(tag, respMap.d?.door_opened, "door_opened")},
+                "door_closed":${setSingleCallback(tag, respMap.d?.door_closed, "door_closed")},
                 "door_open_toolong":${useExitingCallback(respMap.d?.door_open_toolong)},
                 "temp_toohigh":${useExitingCallback(respMap.d?.temp_toohigh)},
                 "temp_toolow":${useExitingCallback(respMap.d?.temp_toolow)},
@@ -597,9 +612,9 @@ def setupCallbacks(def child) {
                 "cap_normal":${useExitingCallback(respMap.d?.cap_normal)},
                 "too_dry":${useExitingCallback(respMap.d?.too_dry)},
                 "too_humid":${useExitingCallback(respMap.d?.too_humid)},
-                "water_detected":${setSingleCallback(respMap.d?.water_detected, "water_detected")},
-                "water_dried":${setSingleCallback(respMap.d?.water_dried, "water_dried")},
-                "motion_timedout":${useExitingCallback(respMap.d?.motion_timedout)}
+                "water_detected":${setSingleCallback(tag, respMap.d?.water_detected, "water_detected")},
+                "water_dried":${setSingleCallback(tag, respMap.d?.water_dried, "water_dried")},
+                "motion_timedout":${setSingleCallback(tag, respMap.d?.motion_timedout, "motion_timedout")}
                 },
                 "applyAll":false}"""
                 
@@ -643,12 +658,17 @@ def light(def child, def on, def flash) {
     return null
 }
 
-def startMotionTimer(def child) {    
+def startMotionTimer(def child) {   
+	log.trace "start motion timer"
+
 	if (state.motionTimers == null) {
 		state.motionTimers = [:]
     }
     
-    def delayTime = 60*motionOffDelay
+    def delayTime = child.getMotionDecay()
+    
+    // don't do less than a minute in this way, once WST has the callback working it will be better
+    delayTime = (delayTime < 60) ? 60 : delayTime
     
     state.motionTimers[child.device.deviceNetworkId] = now() + delayTime
     
@@ -656,8 +676,6 @@ def startMotionTimer(def child) {
 }
 
 def motionTimerHander() {
-	log.trace "motion handler"
-    
     def more = 0
     def removeList = []
     
@@ -687,17 +705,6 @@ def motionTimerHander() {
 
 def resMotionDetection(def child) {
 	log.trace "turning off motion"
-	def id = getTagID(child.device.deviceNetworkId)
-        
-    // rearm on tag server
-    if (id != null) {
-        Map query = [
-            "id": id
-        ]
-        postMessage("/ethClient.asmx/ResetTag", query)
-    } else {
-    	log.trace "Could not find tag"
-    }
     
     // now turn off in device
     def data = [acceleration: "inactive"]
@@ -707,7 +714,6 @@ def resMotionDetection(def child) {
 }
 
 def armMotion(def child) {
-	log.trace "arming"
 	def id = getTagID(child.device.deviceNetworkId)
     
     if (id != null) {
@@ -724,7 +730,6 @@ def armMotion(def child) {
 }
 
 def disarmMotion(def child) {
-	log.trace "disarming"
 	def id = getTagID(child.device.deviceNetworkId)
     
     if (id != null) {
@@ -740,7 +745,7 @@ def disarmMotion(def child) {
 }
 
 
-def setMotionMode(def child, def mode) {
+def setMotionMode(def child, def mode, def timeDelay) {
 	log.trace "setting door to closed"
         
 	def id = getTagID(child.device.deviceNetworkId)
@@ -761,6 +766,8 @@ def setMotionMode(def child, def mode) {
                     result.d.door_mode = true
                 	break
             }
+            
+            result.d.auto_reset_delay = timeDelay
         	
             String jsonString = toJson(result.d)
 			jsonString = toJson(result.d).substring(1, toJson(result.d).size()-1)
@@ -791,20 +798,18 @@ def getTagUUID(def id) {
     return atomicState.tags.find{ it.slaveId == id}?.uuid
 }
 
-def getTagTypeInfo(def type) {
-	Map tag
+def getTagTypeInfo(def tag) {
+	Map tagInfo = [:]
 
-	tag.isMsTag = (tag.tagType == 12 || tag.tagType == 13);
-	tag.isMoistureTag = (tag.tagType == 32 || tag.tagType == 33);
-	tag.hasBeeper = (tag.tagType == 13 || tag.tagType == 12);
-	tag.isReed = (tag.tagType == 52 || tag.tagType == 53);
-	tag.isPIR = (tag.tagType == 72);
-	tag.isKumostat = (tag.tagType == 62);
-	tag.hasEventLog = tag.isMsTag || tag.isReed || tag.isPIR;
-	tag.isNest = tag.thermostat != null && tag.thermostat.nest_id != null;
-	tag.isHTU = (tag.tagType == 52 || tag.tagType == 62 || tag.tagType == 72 || tag.tagType == 13) && !tag.isNest;
+	tagInfo.isMsTag = (tag.tagType == 12 || tag.tagType == 13);
+	tagInfo.isMoistureTag = (tag.tagType == 32 || tag.tagType == 33);
+	tagInfo.hasBeeper = (tag.tagType == 13 || tag.tagType == 12);
+	tagInfo.isReed = (tag.tagType == 52 || tag.tagType == 53);
+	tagInfo.isPIR = (tag.tagType == 72);
+	tagInfo.isKumostat = (tag.tagType == 62);
+	tagInfo.isHTU = (tag.tagType == 52 || tag.tagType == 62 || tag.tagType == 72 || tag.tagType == 13);
     
-    return tag
+    return tagInfo
 } 
 
 def getTagVersion(def tag) {
