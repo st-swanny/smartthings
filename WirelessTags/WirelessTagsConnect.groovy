@@ -211,6 +211,7 @@ def initialize() {
 		else
 		{
 			log.debug "found ${d.displayName} $dni already exists"
+            d.updated()
 		}
         
         if (d) { 

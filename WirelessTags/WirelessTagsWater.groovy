@@ -95,6 +95,10 @@ def initialSetup() {
 
 }
 
+def updated() {
+	log.trace "updated"
+}
+
 void generateEvent(Map results)
 {
 	log.debug "parsing data $results"
