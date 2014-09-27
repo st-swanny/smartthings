@@ -56,3 +56,20 @@ Connect to your Wireless Tags account:
 * Follow the instructions in the App for the rest of the details
 
 If you add new tags to your web account, go through the Wireless Tags (Connect) app again to add the new devices.
+
+## Update Previous Installation
+Update the SmartApp:
+* Open your previously created Smart App
+* Copy the code from WirelessTagsConnect.groovy over the code of your SmartApp
+* Save and Publish For Me
+
+Set up the Device Types:
+* Open your previously created Device Type
+* Copy the code from WirelessTagsMotion.groovy over the code of your Device Type
+* Save and Publish For Me
+* Repeat these steps for WirelessTagsWater.groovy if you have a Water/Moisture Sensor
+
+Connect to your Wireless Tags account:
+* Open the SmartThings application on your iPhone or Android device
+* Go to the Convenience apps section and choose Wireless Tags (Connect)
+* Run through the normal setup process even if you don't want to add any new tags. This will update your existing Devices and update the functionality of the SmartApp.
