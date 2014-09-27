@@ -430,7 +430,8 @@ def updateDeviceStatus(def device, def d) {
         switch: ((device.lit == true) ? "on" : "off"),
         humidity: (device.cap).toDouble().round(),
         contact : (tagEventStates[device.eventState] == "Opened") ? "open" : "closed",
-        acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive"
+        acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive",
+        water : (device.shorted == true) ? "wet" : "dry" 
     ]
     d.generateEvent(data)
 }
