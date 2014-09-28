@@ -183,9 +183,11 @@ void generateEvent(Map results)
             def isDisplayed = true
             
             if (name=="temperature") {
-            	def isChange = isTemperatureStateChange(device, name, value.toString())
+            	def tempValue = getTemperature(value)
+            	def isChange = isTemperatureStateChange(device, name, tempValue.toString())
             	isDisplayed = isChange
-				sendEvent(name: name, value: value, unit: "F", displayed: isDisplayed)                                     									 
+                
+				sendEvent(name: name, value: tempValue, unit: getTemperatureScale(), displayed: isDisplayed)                                     									 
             }
             else {
             	def isChange = isStateChange(device, name, value.toString())
@@ -197,3 +199,11 @@ void generateEvent(Map results)
 	}
 }
 
+def getTemperature(value) {
+	def celsius = value
+	if(getTemperatureScale() == "C"){
+		return celsius
+	} else {
+		return celsiusToFahrenheit(celsius) as Integer
+	}
+}
