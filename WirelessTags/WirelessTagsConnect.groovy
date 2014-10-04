@@ -753,39 +753,42 @@ def setMotionMode(def child, def mode, def timeDelay) {
 	def id = getTagID(child.device.deviceNetworkId)
     
     if (id != null) {
-        Map query = [
-            "id": id
-        ]
-        def result = postMessage("/ethClient.asmx/LoadMotionSensorConfig", query)
-        
-        if (result?.d) {
-        
-        	switch (mode) {
-            	case "accel":
-                	result.d.door_mode = false
-                	break
-                case "door":
-                    result.d.door_mode = true
-                	break
+    	if (mode == "disarmed") {
+        	disarmMotion(child)
+        } else {        
+            Map query = [
+                "id": id
+            ]
+            def result = postMessage("/ethClient.asmx/LoadMotionSensorConfig", query)
+
+            if (result?.d) {
+
+                switch (mode) {
+                    case "accel":
+                        result.d.door_mode = false
+                        break
+                    case "door":
+                        result.d.door_mode = true
+                        break
+                }
+
+                result.d.auto_reset_delay = timeDelay
+
+                String jsonString = toJson(result.d)
+                jsonString = toJson(result.d).substring(1, toJson(result.d).size()-1)
+
+                String queryString = """{"id":${id},
+                "config":{"__type":"MyTagList.MotionSensorConfig",${jsonString}},
+                "applyAll":false}"""
+
+                postMessage("/ethClient.asmx/SaveMotionSensorConfig", queryString)
+                            
+    			armMotion(child)
             }
-            
-            result.d.auto_reset_delay = timeDelay
-        	
-            String jsonString = toJson(result.d)
-			jsonString = toJson(result.d).substring(1, toJson(result.d).size()-1)
-            
-            String queryString = """{"id":${id},
-            "config":{"__type":"MyTagList.MotionSensorConfig",${jsonString}},
-            "applyAll":false}"""
-            
-            postMessage("/ethClient.asmx/SaveMotionSensorConfig", queryString)
         }
-        
     } else {
     	log.trace "Could not find tag"
     }
-    
-    armMotion(child)
     
     return null    
 }

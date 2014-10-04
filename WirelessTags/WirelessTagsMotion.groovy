@@ -30,6 +30,7 @@ metadata {
         command "generateEvent"
         command "setMotionModeAccel"
         command "setMotionModeDoor"
+        command "setMotionModeDisarm"
         command "setDoorClosedPosition"
         command "initialSetup"
         
@@ -91,7 +92,8 @@ metadata {
 		}
         valueTile("doorClosed", "device.motionMode", inactiveLabel: false, decoration: "flat") {
 			state ("accel", label:'Motion Mode:  ${currentValue}', action:"setMotionModeAccel", nextState: "door")
-            state ("door", label:'Motion Mode:  ${currentValue}', action:"setMotionModeDoor", nextState: "accel")
+            state ("door", label:'Motion Mode:  ${currentValue}', action:"setMotionModeDoor", nextState: "disarmed")
+            state ("disarmed", label:'Motion Mode:  ${currentValue}', action:"setMotionModeDisarm", nextState: "accel")
 		}
 		valueTile("setdoorclosed", "device.temperature", inactiveLabel: false, decoration: "flat") {
 			state "default", label:'Arm & Set Door Closed Position', action:"setDoorClosedPosition", nextState: "default"
@@ -146,6 +148,13 @@ def setMotionModeAccel() {
 }
 
 def setMotionModeDoor() {
+	log.debug "set to disarm"
+    def newMode = "disarmed"
+    parent.setMotionMode(this, newMode, getMotionDecay())
+    sendEvent(name: "motionMode", value: newMode)
+}
+
+def setMotionModeDisarm() {
 	log.debug "set to accel"
     def newMode = "accel"
     parent.setMotionMode(this, newMode, getMotionDecay())
