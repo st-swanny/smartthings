@@ -31,27 +31,108 @@ definition(\
 \
 \
 preferences \{\
-	section("Allow control of these things...") \{\
-        input "switches", "capability.switch", title: "Which Switches?", multiple: true, required: false\
-        input "dimmers", "capability.switchLevel", title: "Which Dimmers?", multiple: true, required: false\
-        input "locks", "capability.lock", title: "Which Locks?", multiple: true, required: false\
+	page( name:"mainPage", title:"Set Up Page", nextPage:"reorderPage", uninstall:true, install:false ) \{\
+        section("Allow control of these things...") \{\
+            input "switches", "capability.switch", title: "Which Switches?", multiple: true, required: false\
+            input "dimmers", "capability.switchLevel", title: "Which Dimmers?", multiple: true, required: false\
+            input "locks", "capability.lock", title: "Which Locks?", multiple: true, required: false\
+        \}\
+\
+        section("View state of these things...") \{\
+            input "contacts", "capability.contactSensor", title: "Which Contact?", multiple: true, required: false\
+            input "presence", "capability.presenceSensor", title: "Which Presence?", multiple: true, required: false\
+            input "temperature", "capability.temperatureMeasurement", title: "Which Temperature?", multiple: true, required: false\
+            input "motionSensors", "capability.motionSensor", title: "Which Motion Sensors?", multiple: true, required: false\
+        \}\
+\
+        section("Dashboard Preferences...") \{\
+            input "theme", title: "Theme", "enum", multiple: false, required: true, defaultValue: "Color", metadata: [values: ["Color", "Black and White", "Grey"]]\
+            input "showClock", title: "Show Clock", "enum", multiple: false, required: true, defaultValue: "Yes", metadata: [values: ["Yes", "No"]]\
+            input "clockMode", title: "Clock Mode", "enum", multiple: false, required: true, defaultValue: "24 hour", metadata: [values: ["24 hour", "12 hour"]]\
+            input "showMode", title: "Show Mode", "enum", multiple: false, required: true, defaultValue: "Yes", metadata: [values: ["Yes", "No"]]\
+            input "viewOnly", title: "View Only", "enum", multiple: false, required: true, defaultValue: "No", metadata: [values: ["Yes", "No"]]\
+            input "interval", "number", title:"Refresh Interval (in minutes)", required: true, defaultValue:2\
+            input "title", "text", title:"Dashboard Name"\
+        \}\
+    \}\
+    page(name: "reorderPage")\
+\}\
+\
+def getDeviceIndex(def id) \{\
+	\
+    if (settings["deviceorder$\{id\}"]) \{\
+    	// we have an id\
+        return settings["deviceorder$\{id\}"]\
+    \} else \{\
+    	return 1000\
+    \}\
+\}\
+\
+def getOrderedDeviceMap() \{\
+	def deviceMap = [:]\
+\
+	deviceMap["refresh"] = [type:"refresh", device:null, index: getDeviceIndex("refresh")]\
+    if (showMode == "Yes") \{ deviceMap["mode"] = [type:"mode", device:null, index: getDeviceIndex("mode")] \}\
+    if (showClock == "Yes") \{ deviceMap["clock"] = [type:"clock", device:null, index: getDeviceIndex("clock")] \}\
+\
+    switches.each \{ deviceMap[it.id] = [type:"switch", device:it, index: getDeviceIndex(it.id)] \}\
+    dimmers.each \{ deviceMap[it.id] = [type:"dimmer", device:it, index: getDeviceIndex(it.id)] \}\
+    locks.each \{ deviceMap[it.id] = [type:"lock", device:it, index: getDeviceIndex(it.id)] \}\
+    contacts.each \{ deviceMap[it.id] = [type:"contact", device:it, index: getDeviceIndex(it.id)] \}\
+    presence.each \{ deviceMap[it.id] = [type:"presence", device:it, index: getDeviceIndex(it.id)] \}\
+    temperature.each \{ deviceMap[it.id] = [type:"temperature", device:it, index: getDeviceIndex(it.id)] \}\
+    motionSensors.each \{ deviceMap[it.id] = [type:"motion", device:it, index: getDeviceIndex(it.id)] \}\
+        \
+    // don't have an incoming sort order, do it alphabetically\
+	if (!state.installedOnce) \{\
+        def typeSortOrder = ["refresh", "mode", "clock", "lock", "switch", "dimmer", "contact", "presence", "temperature", "motion"]\
+\
+    	deviceMap = deviceMap.sort \{ a, b -> \
+        		def aType = typeSortOrder.findIndexOf\{ it == a.value.type \}\
+                def bType = typeSortOrder.findIndexOf\{ it == b.value.type \}\
+        		if (aType < bType) \{\
+                    return -1\
+                \} else if (aType > bType) \{\
+                    return 1\
+                \} else \{\
+                	// now check string as same type\
+                	return getDisplayNameFromDeviceMap(a.value) <=> getDisplayNameFromDeviceMap(b.value)\
+                \}\
+            \}\
+    \
+    \} else \{\
+    	deviceMap = deviceMap.sort \{ a, b -> a.value.index.toFloat() <=> b.value.index.toFloat() \}\
     \}\
     \
-    section("View state of these things...") \{\
-        input "contacts", "capability.contactSensor", title: "Which Contact?", multiple: true, required: false\
-        input "presence", "capability.presenceSensor", title: "Which Presence?", multiple: true, required: false\
-        input "temperature", "capability.temperatureMeasurement", title: "Which Temperature?", multiple: true, required: false\
-        input "motionSensors", "capability.motionSensor", title: "Which Motion Sensors?", multiple: true, required: false\
-    \}\
+	return deviceMap\
+\}\
+\
+def getDisplayNameFromDeviceMap(def value) \{\
+	if (value.device) \{\
+    	return value.device.displayName\
+    \} else if (value.type) \{\
+    	return value.type\
+    \} else \{\
+    	return ""\
+    \}    \
+\}\
+\
+def reorderPage() \{\
+	def deviceMap = getOrderedDeviceMap()    \
     \
-    section("Dashboard Preferences...") \{\
-    	input "theme", title: "Theme", "enum", multiple: false, required: true, defaultValue: "Color", metadata: [values: ["Color", "Black and White", "Grey"]]\
-        input "showClock", title: "Show Clock", "enum", multiple: false, required: true, defaultValue: "Yes", metadata: [values: ["Yes", "No"]]\
-        input "clockMode", title: "Clock Mode", "enum", multiple: false, required: true, defaultValue: "24 hour", metadata: [values: ["24 hour", "12 hour"]]\
-        input "showMode", title: "Show Mode", "enum", multiple: false, required: true, defaultValue: "Yes", metadata: [values: ["Yes", "No"]]\
-        input "viewOnly", title: "View Only", "enum", multiple: false, required: true, defaultValue: "No", metadata: [values: ["Yes", "No"]]\
-        input "interval", "number", title:"Refresh Interval (in minutes)", required: true, defaultValue:2\
-        input "title", "text", title:"Dashboard Name"\
+    dynamicPage(name: "reorderPage", title: "Reorder Devices", uninstall:true, install:true) \{\
+        section \{\
+        	paragraph "Set the order of the devices in your dashboard. Decimals can be used for easier movement. For example, use 1.1 to get between 1 and 2."\
+        	def deviceIndex = 1\
+            deviceMap.each \{ key, value ->\
+            	def title = "$\{getDisplayNameFromDeviceMap(value)\} - $\{value.type\}"\
+                if (value.device == null) \{\
+                	title = "$\{value.type\}"\
+                \}\
+            	input "deviceorder$\{key\}", "decimal", title:title, required: true, defaultValue:"$\{deviceIndex\}"\
+            	deviceIndex = deviceIndex+1\
+            \}\
+        \}\
     \}\
 \}\
 \
@@ -203,6 +284,8 @@ def initialize() \{\
     \}\
     subscribe(app, getURL)\
     getURL(null)\
+    \
+    state.installedOnce = true\
 \}\
 \
 def getURL(e) \{\
@@ -215,10 +298,11 @@ def index() \{\
 \}\
 \
 def list() \{\
-	render contentType: "application/javascript", data: "$\{params.callback\}($\{data().encodeAsJSON()\}\})"\
+	render contentType: "application/javascript", data: "$\{params.callback\}($\{dataList().encodeAsJSON()\}\})"\
 \}\
 \
-def data() \{\
+// data in a list view for easier debugging by type\
+def dataList() \{\
     [\
     	locks: locks?.collect\{[type: "lock", id: it.id, name: it.displayName, status: it.currentValue('lock') == "locked" ? "locked" : "unlocked"]\}?.sort\{it.name\},\
         switches: switches?.collect\{[type: "switch", id: it.id, name: it.displayName, status: it.currentValue('switch')]\}?.sort\{it.name\},\
@@ -228,6 +312,27 @@ def data() \{\
         temperature: temperature?.collect\{[type: "temperature", id: it.id, name: it.displayName, status: it.currentValue('temperature')]\}?.sort\{it.name\},\
         motion: motionSensors?.collect\{[type: "motion", id: it.id, name: it.displayName, status: it.currentValue('motion')]\}?.sort\{it.name\},\
     ]\
+\}\
+\
+// data in the ordered view\
+def data() \{\
+\
+	def deviceMap = getOrderedDeviceMap()\
+    \
+    return deviceMap.collect \{ key, it ->\
+    	def itMap = [type: it.type, id: key, name: getDisplayNameFromDeviceMap(it)]\
+        switch (it.type) \{\
+        	case "lock": itMap.status = it.device.currentValue('lock') == "locked" ? "locked" : "unlocked"; break\
+            case "switch": itMap.status = it.device.currentValue('switch'); break\
+            case "dimmer": itMap.status = it.device.currentValue('switch'); itMap.level = it.device.currentValue('level'); break\
+            case "contact": itMap.status = it.device.currentValue('contact'); break\
+            case "presence": itMap.status = it.device.currentValue('presence'); break\
+            case "temperature": itMap.status = it.device.currentValue('temperature'); break\
+            case "motion": itMap.status = it.device.currentValue('motion'); break\
+        \}\
+        \
+        return itMap\
+    \}\
 \}\
 \
 def html() \{\
@@ -745,14 +850,11 @@ def media() \{\
 \
 def body() \{\
 	def devices = ""\
-    data().values().flatten().each\{devices = devices + renderDevice(it)\}\
+    data().each\{devices = devices + renderDevice(it)\}\
     \
 	"""\
     <div class="st-container" data-role="page">\
     	<div data-role="content" data-theme="c">\
-            $\{renderRefresh()\}\
-            $\{showMode == "Yes" ? renderMode() : ""\}\
-            $\{showClock == "Yes" ? renderClock() : ""\}\
             $devices\
 		</div>\
     </div>\
@@ -959,6 +1061,10 @@ def renderMotion(device) \{\
 \
 def renderDevice(device) \{\
     if (!device) return ""\
+    if (device.type == "clock") return renderClock()\
+    if (device.type == "mode") return renderMode()\
+    if (device.type == "refresh") return renderRefresh()\
+    \
     if (device.type == "dimmer") return renderDimmer(device)\
     if (device.type == "switch") return renderSwitch(device)\
     if (device.type == "lock") return renderLock(device)\
