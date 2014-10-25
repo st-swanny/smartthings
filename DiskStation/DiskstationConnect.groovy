@@ -237,10 +237,24 @@ def getDSInfo() {
 def updateCameraInfo(camera) {
     def vendor = camera.additional.device.vendor.replaceAll(" ", "%20")
     def model = camera.additional.device.model.replaceAll(" ", "%20")
-    queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "GetCapability", "vendor=${vendor}&model=${model}", 1)
-    
-    queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPreset", "cameraId=${camera.id}", 1)    
-    queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol", "cameraId=${camera.id}", 1)
+    if ((model == "Define") && (vendor = "User")) {
+    	// user defined camera
+        def capabilities = [:]
+        
+        capabilities.ptzPan = false
+    	capabilities.ptzTilt = false
+    	capabilities.ptzZoom = false
+    	capabilities.ptzHome = false
+    	capabilities.ptzPresetNumber = 0
+        
+        state.cameraCapabilities.put(makeCameraModelKey(vendor, model), capabilities)
+    } else {
+    	// standard camera
+        queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "GetCapability", "vendor=${vendor}&model=${model}", 1)
+
+        queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPreset", "cameraId=${camera.id}", 1)    
+        queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol", "cameraId=${camera.id}", 1)
+    }
 }
 
 Map camerasDiscovered() {
@@ -387,6 +401,8 @@ def locationHandler(evt) {
         if ((state.commandList.size() > 0) && (body != null) && (commandType != ""))
         {
             Map commandData = state.commandList.first()
+            
+            //log.trace "Logging command " + bodyString
             
             //log.trace "master waiting on " + getUniqueCommand(commandData)
             if (getUniqueCommand(commandData) == commandType) 
