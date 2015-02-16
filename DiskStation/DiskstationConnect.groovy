@@ -250,7 +250,8 @@ def updateCameraInfo(camera) {
         state.cameraCapabilities.put(makeCameraModelKey(vendor, model), capabilities)
     } else {
     	// standard camera
-        queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "GetCapability", "vendor=${vendor}&model=${model}", 1)
+        //queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "GetCapability", "vendor=${vendor}&model=${model}", 1)
+        queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "GetCapabilityByCamId", "cameraId=${camera.id}", 4)
 
         queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPreset", "cameraId=${camera.id}", 1)    
         queueDiskstationCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol", "cameraId=${camera.id}", 1)
@@ -324,7 +325,8 @@ def determineCommandFromResponse(parsedEvent, bodyString, body) {
         	if (body.data.sid != null) { return getUniqueCommand("SYNO.API.Auth", "Login") }            
             if (bodyString.contains("maxVersion")) { return getUniqueCommand("SYNO.API.Info", "Query") }
             if (body.data.cameras != null) { return getUniqueCommand("SYNO.SurveillanceStation.Camera", "List") }
-            if (body.data.ptzPan != null) { return getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapability")}
+            //if (body.data.ptzPan != null) { return getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapability")}
+            if (body.data.ptzPan != null) { return getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapabilityByCamId")}
             if ((body.data.total != null) && (body.data.offset != null)) 
             { 	// this hack is annoying, they return the same thing if there are zero presets or patrols
             	if ((state.commandList.size() > 0) 
@@ -348,6 +350,7 @@ def doesCommandReturnData(uniqueCommand) {
         case getUniqueCommand("SYNO.API.Info", "Query"): 
         case getUniqueCommand("SYNO.SurveillanceStation.Camera", "List"): 
         case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapability"): 
+        case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapabilityByCamId"):
         case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"): 
         case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol"): 
         case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):         
@@ -383,10 +386,20 @@ def locationHandler(evt) {
             log.trace "DISKSTATION REPONSE TYPE: $type"
             if (type?.contains("text/plain")) 
             {
-            	body = new groovy.json.JsonSlurper().parseText(bodyString)	           
+            	body = new groovy.json.JsonSlurper().parseText(bodyString)
+            } else if (type?.contains("text/html")) {
+                body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))
+                if (body.error) {
+                    log.trace bodyString                    
+                	Map commandData = state.commandList.first()
+                    handleErrors(commandData)
+                    return
+                }
+                log.trace bodyString
             } else {
                 // unexpected data type
                 if (state.commandList.size() > 0) {
+                	log.trace "unexpected data type"
                 	Map commandData = state.commandList.first()
                 	handleErrors(commandData)
                 }
@@ -431,6 +444,19 @@ def locationHandler(evt) {
                                 if ((info[0][1] != null) && (info[0][2] != null)) {
                                     state.cameraCapabilities.put(makeCameraModelKey(info[0][1], info[0][2]), body.data)
                                 }
+                            	break                             
+                            case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapabilityByCamId"):
+                            	def cameraId = (commandData.params =~ /cameraId=([0-9]+)/) ? (commandData.params =~ /cameraId=([0-9]+)/)[0][1] : null
+                                if (cameraId) { 
+                                	def camera = state.SSCameraList.find { it.id.toString() == cameraId.toString() }
+                                    if (camera) {
+                                        def vendor = camera.additional.device.vendor.replaceAll(" ", "%20")
+                                        def model = camera.additional.device.model.replaceAll(" ", "%20")
+                                        state.cameraCapabilities.put(makeCameraModelKey(vendor, model), body.data)
+                                    } else {
+                                    	log.trace "invalid camera id"
+                                    }
+                                }
                             	break
                             case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"):
                             	def cameraId = (commandData.params =~ /cameraId=([0-9]+)/) ? (commandData.params =~ /cameraId=([0-9]+)/)[0][1] : null
@@ -456,6 +482,7 @@ def locationHandler(evt) {
                     }
                 }
                 catch (Exception err) {
+                	log.trace "parse exception"
                     handleErrors(commandData)
                 }
                 // exit out, we've handled the message we wanted
@@ -542,7 +569,7 @@ def handleErrors(commandData) {
         state.error = "Login Error. Login failed. Check your login credentials."
         break
             default:
-            state.error = "Error communicating with the Diskstation. Please check your settings and network connection."
+            state.error = "Error communicating with the Diskstation. Please check your settings and network connection. API = " + commandData.api + " command = " + commandData.command
         break
             }
 }
@@ -966,4 +993,5 @@ def pollChildren(){
         }       
     }
 }
+
 
