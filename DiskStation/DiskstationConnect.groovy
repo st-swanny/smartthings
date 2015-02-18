@@ -93,9 +93,6 @@ def motionSetup()
             	paragraph "The test message was received from the DiskStation. " + 
                 "Motion detected by the cameras can now be used as triggers to other ST devices."
             } 
-            section("Optional Settings", hidden: true, hideable: true) {
-            	input "motionOffDelay", "number", title:"Minutes with no message before motion is deactivated:", defaultValue:1
-            } 
         }
     }
 }
@@ -392,8 +389,17 @@ def locationHandler(evt) {
                 if (body.error) {
                     log.trace bodyString                    
                 	Map commandData = state.commandList.first()
-                    handleErrors(commandData)
-                    return
+                    // should we generate an error for this type or ignore
+                    if ((getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"))
+                    	|| (getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol")))
+                    {
+                    	// ignore
+                        body.data = null
+                    } else {
+                        // don't ignore
+                    	handleErrors(commandData)
+                        return
+                    }
                 }
                 log.trace bodyString
             } else {
