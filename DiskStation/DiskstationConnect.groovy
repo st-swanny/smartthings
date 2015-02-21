@@ -383,25 +383,30 @@ def locationHandler(evt) {
             log.trace "DISKSTATION REPONSE TYPE: $type"
             if (type?.contains("text/plain")) 
             {
+            	log.trace bodyString     
             	body = new groovy.json.JsonSlurper().parseText(bodyString)
             } else if (type?.contains("text/html")) {
                 body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))
-                if (body.error) {
-                    log.trace bodyString                    
-                	Map commandData = state.commandList.first()
-                    // should we generate an error for this type or ignore
-                    if ((getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"))
-                    	|| (getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol")))
-                    {
-                    	// ignore
-                        body.data = null
+                log.trace bodyString
+                if (body.error) {   
+                    if (state.commandList.size() > 0) {
+                        Map commandData = state.commandList?.first()
+                        // should we generate an error for this type or ignore
+                        if ((getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"))
+                            || (getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol")))
+                        {
+                            // ignore
+                            body.data = null
+                        } else {
+                            // don't ignore
+                            handleErrors(commandData)
+                            return
+                        }
                     } else {
-                        // don't ignore
-                    	handleErrors(commandData)
-                        return
+                    	// error on a command we don't care about
+                    	return
                     }
                 }
-                log.trace bodyString
             } else {
                 // unexpected data type
                 if (state.commandList.size() > 0) {

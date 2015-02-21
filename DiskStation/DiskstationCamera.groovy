@@ -397,14 +397,14 @@ def doRefreshUpdate(capabilities) {
 def on() {
 	log.trace "start recording"
     def cameraId = getCameraID()
-    def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.ExternalRecording", "record", "cameraId=${cameraId}&action=start", 1)     
+    def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.ExternalRecording", "Record", "cameraId=${cameraId}&action=start", 2)     
     hubAction
 }
 
 def off() {
 	log.trace "stop recording"
     def cameraId = getCameraID()
-    def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.ExternalRecording", "record", "cameraId=${cameraId}&action=stop", 1)
+    def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.ExternalRecording", "Record", "cameraId=${cameraId}&action=stop", 2)
     hubAction    
 }
 
@@ -545,3 +545,4 @@ private getPictureName() {
 	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
 	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
 }
+
