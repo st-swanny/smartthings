@@ -64,8 +64,8 @@ def motionSetup()
             section("Diskstation Setup") {
                 paragraph "Follow these steps to set up motion notifications from Surveillance Station. "
                 paragraph "1. Log into your Diskstation and go to Surveillance Station"
-                paragraph "2. Go to Management Tab (top) -> Notification (left) -> Service -> SMS" 
-                paragraph "3. Enable SMS notifications. Note that this setup will not actually send " + 
+                paragraph "2. Choose Notifications from the Menu"
+                paragraph "3. Go to the SMS tab. Enable SMS notifications. Note that this setup will not actually send " + 
                           "SMS messages but instead overrides the SMS system to call a web link for this SmartApp."
                 paragraph "4. Click 'Add SMS Service Provider'"
                 paragraph "5. Copy the text entry field below and past into the SMS URL field"                
@@ -77,8 +77,10 @@ def motionSetup()
                 paragraph "10. Type 'user' for the Username, 'password' in both Password fields"
                 paragraph "11. Type 123-4567890 for the first phone number"
                 paragraph "12. Press 'Send a test SMS message' to update this screen"
-                paragraph "13. Go back to the Notification -> Settings tab"
-                paragraph "14. Go to Motion Detected and check the SMS Notification Type"
+                paragraph "13. Now click on the Advanced tab in the Nofications window"
+                paragraph "14. Go to Camera on the left side of this pane and then click Motion Detected"
+                paragraph "15. Choose 'Edit' and 'Edit' on the top left of the pane"
+                paragraph "16. Select SMS as the Notification Type"
                 paragraph "If the page does not say 'success' within 10-15 seconds after sending the test message, " +
                 		  "go to the previous page and come back to refresh the screen again. If you still don't have " +
                           "the success message, retrace these steps."
@@ -1004,5 +1006,3 @@ def pollChildren(){
         }       
     }
 }
-
-
