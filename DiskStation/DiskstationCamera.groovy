@@ -441,7 +441,7 @@ def checkMotionDeactivate() {
     	timeRemaining = delay - ((now() - state.lastMotion)/1000) 
     }
     
-    if (timeRemaining < 0) {
+    if ((timeRemaining != null) && (timeRemaining < 0)) {
 		sendEvent(name: "motion", value: "inactive")
         state.lastMotion = null
         timeRemaining = null
