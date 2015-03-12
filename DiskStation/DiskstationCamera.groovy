@@ -441,7 +441,8 @@ def checkMotionDeactivate() {
     	timeRemaining = delay - ((now() - state.lastMotion)/1000) 
     }
     
-    if ((timeRemaining != null) && (timeRemaining < 0)) {
+    // we can end motion early to avoid unresponsiveness later
+    if (timeRemaining < 15) {
 		sendEvent(name: "motion", value: "inactive")
         state.lastMotion = null
         timeRemaining = null
@@ -545,4 +546,5 @@ private getPictureName() {
 	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
 	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
 }
+
 

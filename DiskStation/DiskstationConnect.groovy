@@ -865,8 +865,8 @@ def handleMotion() {
 
 	if ((nextTime != 1000000)){
     	log.trace "nextTime = " + nextTime
-        nextTime = (nextTime >= 8) ? nextTime : 8
-		runIn((nextTime+2).toInteger(), "handleMotion")
+        nextTime = (nextTime >= 25) ? nextTime : 25
+		runIn((nextTime+5).toInteger(), "handleMotion")
     }
 }
 
