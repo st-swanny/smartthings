@@ -435,14 +435,19 @@ def motionActivated() {
 def checkMotionDeactivate() {
 	def timeRemaining = null
     
-    def delay = (parent?.motionOffDelay) ? parent.motionOffDelay : 5
-    delay = delay * 60
-    if (state.lastMotion != null) { 
-    	timeRemaining = delay - ((now() - state.lastMotion)/1000) 
+    try {
+        def delay = (parent?.motionOffDelay) ? parent.motionOffDelay : 5
+        delay = delay * 60
+        if (state.lastMotion != null) { 
+            timeRemaining = delay - ((now() - state.lastMotion)/1000) 
+        }
+    }
+    catch (Exception err) {
+    	timeRemaining = 0
     }
     
     // we can end motion early to avoid unresponsiveness later
-    if (timeRemaining < 15) {
+    if ((timeRemaining != null) && (timeRemaining < 15)) {
 		sendEvent(name: "motion", value: "inactive")
         state.lastMotion = null
         timeRemaining = null
