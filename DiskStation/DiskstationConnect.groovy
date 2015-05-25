@@ -387,6 +387,9 @@ def locationHandler(evt) {
             {
             	log.trace bodyString     
             	body = new groovy.json.JsonSlurper().parseText(bodyString)
+            } else if (type?.contains("application/json")) {
+            	log.trace bodyString
+                body = new groovy.json.JsonSlurper().parseText(bodyString)
             } else if (type?.contains("text/html")) {
                 body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))
                 log.trace bodyString
@@ -763,7 +766,7 @@ def sendDiskstationCommand(Map commandData) {
         def url = createDiskstationURL(commandData)
 
         def hubaction = new physicalgraph.device.HubAction(
-            """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\n\r\n""", 
+            """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: application/json, text/plain, text/html, */*\r\n\r\n""", 
             physicalgraph.device.Protocol.LAN, "${deviceNetworkId}")
         if (commandData.options) {
             hubAction.options = commandData.options
