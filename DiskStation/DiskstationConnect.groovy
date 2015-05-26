@@ -517,9 +517,8 @@ def locationHandler(evt) {
                     case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):
                         if (parsedEvent.bucket && parsedEvent.key){
                             childCommand?.child?.putImageInS3(parsedEvent)
-                            childCommand?.child?.finalizeDiskstationCommand_Child()
-                        }
-                        return
+                        }                        
+                        return finalizeAndSendChildMessage(childCommand?.child)
                     case getUniqueCommand("SYNO.SurveillanceStation.ExternalRecording", "record"):
                         if (body.success == true) {
                         	log.trace "record start or stop success received"
@@ -527,9 +526,8 @@ def locationHandler(evt) {
                         	// note that this doesn't actually work here as we don't know the type
                             childCommand?.child?.recordEventFailure()
                         }
-                        childCommand?.child?.finalizeDiskstationCommand_Child()
-                        return
-                } 
+                        return finalizeAndSendChildMessage(childCommand?.child)
+                }
             }
         }
         
@@ -734,7 +732,6 @@ def addCameras() {
 def createDiskstationURL(Map commandData) {
     String apipath = state.api.get(commandData.api)?.path
     if (apipath != null) {
-        log.trace "sending message to " + apipath
 
         // add session id for most events (not api query or login)
         def session = ""
@@ -757,27 +754,37 @@ def createDiskstationURL(Map commandData) {
     return null
 }
 
-def sendDiskstationCommand(Map commandData) {
+def createHubAction(Map commandData) {
     
     String deviceNetworkId = getDeviceId(userip, userport)
     String ip = userip + ":" + userport
 
     try {
         def url = createDiskstationURL(commandData)
+        def acceptType = "application/json, text/plain, text/html, */*"
+        if (commandData.acceptType) {
+        	acceptType = commandData.acceptType
+        }
 
         def hubaction = new physicalgraph.device.HubAction(
-            """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: application/json, text/plain, text/html, */*\r\n\r\n""", 
+            """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: ${acceptType}\r\n\r\n""", 
             physicalgraph.device.Protocol.LAN, "${deviceNetworkId}")
-        if (commandData.options) {
-            hubAction.options = commandData.options
+        if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
+            hubaction.options = [outputMsgToS3:true]
         }
-        sendHubCommand(hubaction)        
+        return hubaction        
     }
     catch (Exception err) {
         log.debug "error sending message: " + err
     }
-    
-    // set a timer to handle possible error cases
+    return null
+}
+
+def sendDiskstationCommand(Map commandData) {
+	def hubaction = createHubAction(commandData)
+    if (hubaction) {
+		sendHubCommand(hubaction)
+    }
 }
 
 def queueDiskstationCommand(String api, String command, String params, int version) {
@@ -870,6 +877,13 @@ def handleMotion() {
     	log.trace "nextTime = " + nextTime
         nextTime = (nextTime >= 25) ? nextTime : 25
 		runIn((nextTime+5).toInteger(), "handleMotion")
+    }
+}
+
+def finalizeAndSendChildMessage(child) {
+	def newCommand = child?.finalizeDiskstationCommand_ChildFromParent()
+    if (newCommand != null) {
+    	sendDiskstationCommand(newCommand)
     }
 }
 

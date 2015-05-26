@@ -180,10 +180,11 @@ def putImageInS3(map) {
         
 		if(imageBytes)
 		{
+        	def picName = getPictureName()
 			s3ObjectContent = imageBytes.getObjectContent()
 			def bytes = new ByteArrayInputStream(s3ObjectContent.bytes)
-			storeImage(getPictureName(), bytes)
-            log.trace "image stored"
+			storeImage(picName, bytes)
+            log.trace "image stored = " + picName
 		}
         
 	}
@@ -468,6 +469,8 @@ def autoTakeOff() {
 
 def initChild(Map capabilities)
 {
+    state.commandList = new LinkedList()
+    
    	sendEvent(name: "panSupported", value: (capabilities.ptzPan) ? "yes" : "no")
     sendEvent(name: "tiltSupported", value: (capabilities.ptzTilt) ? "yes" : "no")
     sendEvent(name: "zoomSupported", value: (capabilities.ptzZoom) ? "yes" : "no")
@@ -496,21 +499,26 @@ def initChild(Map capabilities)
 }
 
 def finalizeDiskstationCommand_Child() {
-	state.lastCommandTime = 0
-    state.lastCommandCommand = null
-   	state.lastCommandTime = null
+    state.commandList?.remove(0)
+    
+    // send next command if list was full
+    if (state.commandList?.size() > 0) {
+    	sendDiskstationCommand_Child(state.commandList.first())
+    } 
+}
+
+def finalizeDiskstationCommand_ChildFromParent() {
+    state.commandList?.remove(0)
+    
+    // send next command if list was full
+    if (state.commandList?.size() > 0) {
+    	return state.commandList?.first()
+    } 
+    return null
 }
 
 def getFirstCommand_Child() {
-	if (state.lastCommandTime > 0) {
-		def commandData = [:]
-    	commandData.put('time', state.lastCommandTime)
-        commandData.put('api', state.lastCommandApi)
-        commandData.put('command', state.lastCommandCommand)
-        return commandData
-    } else {
-    	return null
-    }
+	return state.commandList?.first()
 }
 
 def queueDiskstationCommand_Child(String api, String command, String params, int version) {
@@ -521,27 +529,37 @@ def queueDiskstationCommand_Child(String api, String command, String params, int
     commandData.put('version', version)
     commandData.put('time', now())
     
+    if (parent.getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == parent.getUniqueCommand(commandData)) {
+		commandData.put('acceptType', "*/*");
+    }
+    
+    if (state.commandList == null) { state.commandList = new LinkedList() }
+    
     if (parent.doesCommandReturnData(parent.getUniqueCommand(commandData))) {
-    	state.lastCommandApi = commandData.api
-    	state.lastCommandCommand = commandData.command
-    	state.lastCommandTime = commandData.time
-	}
-	sendDiskstationCommand_Child(commandData)
+    	// queue since we get data
+        state.commandList.add(commandData)
+
+        // list was empty, send now
+        if (state.commandList.size() == 1) {
+            sendDiskstationCommand_Child(state.commandList.first())
+        } else {
+        	// something else waiting
+            if ((now() - state.commandList.first().time) > 15000) {
+            	log.trace "waiting command being cancelled = " + state.commandList.first()
+                finalizeDiskstationCommand_Child()
+            } else {
+            	log.trace "queued " + commandData.command
+            }
+        }
+    } else {
+    	sendDiskstationCommand_Child(commandData)
+    }
 }
 
 def sendDiskstationCommand_Child(commandData) {
-
-	def path = parent.createDiskstationURL(commandData)
-	def host = parent.getDeviceId(parent.userip, parent.userport)
-
-	def hubAction = new physicalgraph.device.HubAction(
-		method: "GET",
-		path: path,
-		headers: [HOST:host]
-	)       
-    if (parent.getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == parent.getUniqueCommand(commandData)) {
-		hubAction.options = [outputMsgToS3:true]
-    }
+	log.trace "sending " + commandData.command
+    
+	def hubAction = parent.createHubAction(commandData)
     
 	hubAction 
 }
@@ -551,5 +569,6 @@ private getPictureName() {
 	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
 	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
 }
+
 
 
