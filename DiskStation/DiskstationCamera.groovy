@@ -518,8 +518,12 @@ def finalizeDiskstationCommand_ChildFromParent() {
 }
 
 def getFirstCommand_Child() {
-	return state.commandList?.first()
-}
+	if (state.commandList?.size() > 0) {
+    	return state.commandList?.first()
+    } else {
+    	return null
+    }
+}	
 
 def queueDiskstationCommand_Child(String api, String command, String params, int version) {
     def commandData = [:]
