@@ -101,14 +101,12 @@ def motionSetup()
 
 
 def diskstationDiscovery()
-{   
-    if(!state.subscribe) {
-        log.trace "subscribe to location"
-        subscribe(location, null, locationHandler, [filterEvents:false])
-        state.subscribe = true
-        
-        state.commandList = new LinkedList()
-    }
+{
+    log.trace "subscribe to location"
+    subscribe(location, null, locationHandler, [filterEvents:false])
+    state.subscribe = true
+
+    state.commandList = new LinkedList()
     
     // clear the refresh count for the next page
     state.refreshCount = 0
