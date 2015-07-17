@@ -31,6 +31,7 @@ metadata {
         attribute "curPatrol", "string"
         attribute "refreshState", "string"
         attribute "autoTake", "string"
+        attribute "takeImage", "string"
         
         command "left"
     	command "right"
@@ -50,6 +51,13 @@ metadata {
         command "refresh"
         command "autoTakeOff"
         command "autoTakeOn"
+        command "motionActivated"
+        command "motionDeactivate"
+        command "initChild"
+        command "doRefreshWait"
+        command "doRefreshUpdate"
+        command "recordEventFailure"
+        command "putImageInS3"
 	}
 
 	simulator {
@@ -172,7 +180,6 @@ def parse(String description) {
 }
 
 def putImageInS3(map) {
-
 	def s3ObjectContent
 
 	try {
@@ -200,7 +207,7 @@ def putImageInS3(map) {
 def getCameraID() {
     def cameraId = parent.getDSCameraIDbyChild(this)
     if (cameraId == null) {
-    	log.trace "could not find device DNI = ${this.device?.deviceNetworkId}"
+    	log.trace "could not find device DNI = ${device.deviceNetworkId}"
     }
     return (cameraId)
 }
@@ -208,6 +215,8 @@ def getCameraID() {
 // handle commands
 def take() {
 	log.trace "take picture"    
+    def lastNum = device.currentState("takeImage")?.integerValue 
+    sendEvent(name: "takeImage", value: "${lastNum+1}")
     def cameraId = getCameraID()
     def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}", 1)    
     hubAction
@@ -360,38 +369,7 @@ def refresh() {
     	sendEvent(name: "refreshState", value: "want")
         state.refreshTime = now()        
     	parent.refreshCamera(this)
-        
-        // clear child command
-    	finalizeDiskstationCommand_Child()
-        
-        log.debug "start logging info"
-        log.debug parent.state.cameraPatrols
-        log.debug parent.state.cameraPresets
-        log.debug parent.state.cameraCapabilities
-        log.debug parent.state.SSCameraList
-        log.debug "stop logging info"
     }
-}
-
-// parent checks this to say if we want a refresh
-def wantRefresh() {
-	def want = (device.currentState("refreshState")?.value == "want")
-    if (want) {
-    	sendEvent(name: "refreshState", value: "waiting")
-    }
-    return (want)
-}
-
-def getRefreshState() {
-	return (device.currentState("refreshState")?.value)
-}
-
-def waitingRefresh() {
-	return (device.currentState("refreshState")?.value == "waiting")
-}
-
-def doRefreshUpdate(capabilities) {
-	initChild(capabilities)
 }
 
 // recording on / off
@@ -417,44 +395,13 @@ def recordEventFailure() {
 }
 
 def motionActivated() {
-	if ((state.lastMotion == null) || ((now() - state.lastMotion) > 1000)) {
-    	def motionMap = [:]
-        motionMap.haveMotion = true
-        if (device.currentState("motion")?.value != "active") {
-            sendEvent(name: "motion", value: "active")
-            if (device.currentState("autoTake")?.value == "on") {
-            	motionMap.action = take()
-            }
-        }
-
-        state.lastMotion = now()
-     	return motionMap 
-    } 
-    return null
+    if (device.currentState("motion")?.value != "active") {
+        sendEvent(name: "motion", value: "active")
+    }
 }
 
-def checkMotionDeactivate() {
-	def timeRemaining = null
-    
-    try {
-        def delay = (parent?.motionOffDelay) ? parent.motionOffDelay : 5
-        delay = delay * 60
-        if (state.lastMotion != null) { 
-            timeRemaining = delay - ((now() - state.lastMotion)/1000) 
-        }
-    }
-    catch (Exception err) {
-    	timeRemaining = 0
-    }
-    
-    // we can end motion early to avoid unresponsiveness later
-    if ((timeRemaining != null) && (timeRemaining < 15)) {
-		sendEvent(name: "motion", value: "inactive")
-        state.lastMotion = null
-        timeRemaining = null
-    }
-    
-    return timeRemaining
+def motionDeactivate() {
+	sendEvent(name: "motion", value: "inactive")
 }
 
 def autoTakeOn() {
@@ -467,10 +414,16 @@ def autoTakeOff() {
 	sendEvent(name: "autoTake", value: "off")
 }
 
+def doRefreshWait() {
+	sendEvent(name: "refreshState", value: "waiting")
+}
+
+def doRefreshUpdate(capabilities) {
+	initChild(capabilities)
+}
+
 def initChild(Map capabilities)
-{
-    state.commandList = new LinkedList()
-    
+{   
    	sendEvent(name: "panSupported", value: (capabilities.ptzPan) ? "yes" : "no")
     sendEvent(name: "tiltSupported", value: (capabilities.ptzTilt) ? "yes" : "no")
     sendEvent(name: "zoomSupported", value: (capabilities.ptzZoom) ? "yes" : "no")
@@ -495,77 +448,16 @@ def initChild(Map capabilities)
     	sendEvent(name: "autoTake", value: "off")
     }
     
-	state.lastMotion = null
+    sendEvent(name: "takeImage", value: "0")
 }
-
-def finalizeDiskstationCommand_Child() {
-    state.commandList?.remove(0)
-    
-    // send next command if list was full
-    if (state.commandList?.size() > 0) {
-    	sendDiskstationCommand_Child(state.commandList.first())
-    } 
-}
-
-def finalizeDiskstationCommand_ChildFromParent() {
-    state.commandList?.remove(0)
-    
-    // send next command if list was full
-    if (state.commandList?.size() > 0) {
-    	return state.commandList?.first()
-    } 
-    return null
-}
-
-def getFirstCommand_Child() {
-	if (state.commandList?.size() > 0) {
-    	return state.commandList?.first()
-    } else {
-    	return null
-    }
-}	
 
 def queueDiskstationCommand_Child(String api, String command, String params, int version) {
-    def commandData = [:]
-    commandData.put('api', api)
-    commandData.put('command', command)
-    commandData.put('params', params)
-    commandData.put('version', version)
-    commandData.put('time', now())
+    def commandData = parent.createCommandData(api, command, params, version)
     
-    if (parent.getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == parent.getUniqueCommand(commandData)) {
-		commandData.put('acceptType', "*/*");
-    }
-    
-    if (state.commandList == null) { state.commandList = new LinkedList() }
-    
-    if (parent.doesCommandReturnData(parent.getUniqueCommand(commandData))) {
-    	// queue since we get data
-        state.commandList.add(commandData)
-
-        // list was empty, send now
-        if (state.commandList.size() == 1) {
-            sendDiskstationCommand_Child(state.commandList.first())
-        } else {
-        	// something else waiting
-            if ((now() - state.commandList.first().time) > 15000) {
-            	log.trace "waiting command being cancelled = " + state.commandList.first()
-                finalizeDiskstationCommand_Child()
-            } else {
-            	log.trace "queued " + commandData.command
-            }
-        }
-    } else {
-    	sendDiskstationCommand_Child(commandData)
-    }
-}
-
-def sendDiskstationCommand_Child(commandData) {
 	log.trace "sending " + commandData.command
     
-	def hubAction = parent.createHubAction(commandData)
-    
-	hubAction 
+	def hubAction = parent.createHubAction(commandData)    
+	hubAction     
 }
 
 //helper methods
@@ -573,6 +465,3 @@ private getPictureName() {
 	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
 	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
 }
-
-
-

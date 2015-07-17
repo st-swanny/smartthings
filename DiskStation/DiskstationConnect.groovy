@@ -214,6 +214,7 @@ def getDSInfo() {
     state.SSCameraList = null
     state.error = ""
     state.api = ["SYNO.API.Info":[path:"query.cgi",minVersion:1,maxVersion:1]]
+    state.lastEventTime = null
     
     clearDiskstationCommandQueue() 
 
@@ -284,28 +285,56 @@ def makeCameraModelKey(vendor, model) {
 
 /////////////////////////////////////
 
+def finalizeChildCommand(commandInfo) {
+	state.lastEventTime = commandInfo.time
+}
+
 def getFirstChildCommand(commandType) {
-	def children = getChildDevices()
-    def firstCommand = null;
+	def commandInfo = null
     
-    children.each {
-    	def newCommand = it.getFirstCommand_Child()
-        if (newCommand != null) {
-        	if (commandType == getUniqueCommand(newCommand)) {        
-                // make sure the time of this command is reasonable
-                
-                newCommand.child = it
-                if (firstCommand != null) {
-                    if (firstCommand.time < newCommand.time) {
-                        firstCommand = newCommand;
-                    }
-                } else {
-                    firstCommand = newCommand;
-                }
+	// get event type to search for
+    def searchType = null
+	switch (commandType) {
+        case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):
+        	searchType = "takeImage"
+        	break   
+    }
+    
+    if (searchType != null) {
+        def children = getChildDevices()
+        def bestTime = now()
+        def startTime = now() - 40000
+        
+        if (state.lastEventTime != null) {
+        	if (startTime <= state.lastEventTime) {
+        		startTime = state.lastEventTime+1
             }
         }
+        
+        //log.trace "startTime = ${startTime}, now = ${now()}"
+
+        children.each {
+            // get the events from the child
+            def events = it.eventsSince(new Date(startTime))        
+            def typedEvents = events.findAll { it.name == searchType }
+
+			if (typedEvents) {
+             	typedEvents.each { event ->
+                    def eventTime = event.date.getTime()
+                    //log.trace "eventTime = ${eventTime}"
+                    if (eventTime >= startTime && eventTime < bestTime) {
+                        // is it the oldest
+                        commandInfo = [:]
+                        commandInfo.child = it        
+                        commandInfo.time = eventTime
+                        bestTime = eventTime
+                        //log.trace "bestTime = ${bestTime}"
+                    }
+                }
+			}
+        }
     }
-    return firstCommand
+    return commandInfo
 }
 
 /////////////////////////////////////
@@ -334,7 +363,6 @@ def determineCommandFromResponse(parsedEvent, bodyString, body) {
             		return getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol") 
                 }
             }
-            if (body.data.success != null) { return getUniqueCommand("SYNO.SurveillanceStation.ExternalRecording", "record") }
     	}
     }
     
@@ -350,8 +378,7 @@ def doesCommandReturnData(uniqueCommand) {
         case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapabilityByCamId"):
         case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"): 
         case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol"): 
-        case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):         
-        case getUniqueCommand("SYNO.SurveillanceStation.ExternalRecording", "record"):
+        case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):
         	return true
     }
     
@@ -423,7 +450,7 @@ def locationHandler(evt) {
         
         // gathered our incoming command data, see what we have        
         def commandType = determineCommandFromResponse(parsedEvent, bodyString, body)
-   
+   		
    		// check if this is a command for the master   
         if ((state.commandList.size() > 0) && (body != null) && (commandType != ""))
         {
@@ -437,7 +464,7 @@ def locationHandler(evt) {
             	// types match between incoming and what we wanted, handle it
                 def finalizeCommand = true
 
-                try {
+                //try {
                     if (body.success == true)
                     {
                         switch (getUniqueCommand(commandData)) {
@@ -494,11 +521,11 @@ def locationHandler(evt) {
                     if (finalizeCommand == true) {
                         finalizeDiskstationCommand()
                     }
-                }
-                catch (Exception err) {
-                	log.trace "parse exception"
-                    handleErrors(commandData)
-                }
+                //}
+                //catch (Exception err) {
+                //	log.trace "parse exception: ${err}"
+                //    handleErrors(commandData)
+                //}
                 // exit out, we've handled the message we wanted
 				return
             }            
@@ -508,23 +535,16 @@ def locationHandler(evt) {
         
         if (commandType != "") {
             // see who wants this type (commandType)        
-            def childCommand = getFirstChildCommand(commandType)
+            def commandInfo = getFirstChildCommand(commandType)
 
-            if (childCommand != null) {        
+            if (commandInfo != null) {
                 switch (commandType) {
                     case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"):
                         if (parsedEvent.bucket && parsedEvent.key){
-                            childCommand?.child?.putImageInS3(parsedEvent)
-                        }                        
-                        return finalizeAndSendChildMessage(childCommand?.child)
-                    case getUniqueCommand("SYNO.SurveillanceStation.ExternalRecording", "record"):
-                        if (body.success == true) {
-                        	log.trace "record start or stop success received"
-                        } else {
-                        	// note that this doesn't actually work here as we don't know the type
-                            childCommand?.child?.recordEventFailure()
+                        	log.trace "saving image to device"
+                            commandInfo?.child?.putImageInS3(parsedEvent)
                         }
-                        return finalizeAndSendChildMessage(childCommand?.child)
+                        return finalizeChildCommand(commandInfo)
                 }
             }
         }
@@ -677,6 +697,8 @@ def initialize() {
 	state.subscribe = false
     state.getDSinfo = true
     
+    state.lastMotion = [:]
+    
     if (selectedCameras) {
     	addCameras()
     }
@@ -785,14 +807,24 @@ def sendDiskstationCommand(Map commandData) {
     }
 }
 
-def queueDiskstationCommand(String api, String command, String params, int version) {
-    
+def createCommandData(String api, String command, String params, int version) {
     def commandData = [:]
     commandData.put('api', api)
     commandData.put('command', command)
     commandData.put('params', params)
     commandData.put('version', version)
     commandData.put('time', now())
+    
+    if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
+		commandData.put('acceptType', "*/*");
+    }
+    
+    return commandData
+}
+
+def queueDiskstationCommand(String api, String command, String params, int version) {
+    
+    def commandData = createCommandData(api, command, params, version)
     
     if (doesCommandReturnData(getUniqueCommand(commandData))) {
     	// queue since we get data
@@ -844,20 +876,48 @@ def webNotifyCallback() {
         if (thisCamera) {
         	def cameraDNI = createCameraDNI(thisCamera)
             if (cameraDNI) {
-				def d = getChildDevice(cameraDNI)
-                def motionDetails = d?.motionActivated()
-                if (motionDetails != null) {
-                	log.trace "motion on child device: " + d
-                    if (motionDetails.action != null) {
-                    	// need to send the hubAction for the child
-                        log.trace "taking motion image for child"
-                    	sendHubCommand(motionDetails.action) 
+                if ((state.lastMotion[cameraDNI] == null) || ((now() - state.lastMotion[cameraDNI]) > 1000)) {
+                    state.lastMotion[cameraDNI] = now()
+                    
+                    def d = getChildDevice(cameraDNI)
+                    if (d && d.currentValue("motion") == "inactive") {
+                        log.trace "motion on child device: " + d
+                        d.motionActivated()
+                        if (d.currentValue("autoTake") == "on") {
+                            log.trace "taking motion image for child"
+                            def commandData = d.take()
+                            sendDiskstationCommand(commandData)
+                        }
+                        handleMotion()
                     }
-                	handleMotion()
                 }
             }
         }
     }
+}
+
+def checkMotionDeactivate(child) {
+	def timeRemaining = null
+    def cameraDNI = child.deviceNetworkId
+    
+    try {
+        def delay = (motionOffDelay) ? motionOffDelay : 5
+        delay = delay * 60
+        if (state.lastMotion[cameraDNI] != null) { 
+            timeRemaining = delay - ((now() - state.lastMotion[cameraDNI])/1000) 
+        }
+    }
+    catch (Exception err) {
+    	timeRemaining = 0
+    }
+    
+    // we can end motion early to avoid unresponsiveness later
+    if ((timeRemaining != null) && (timeRemaining < 15)) {
+		child.motionDeactivate()
+        state.lastMotion[cameraDNI] = null
+        timeRemaining = null
+    }
+    return timeRemaining
 }
 
 def handleMotion() {
@@ -865,7 +925,7 @@ def handleMotion() {
     def nextTime = 1000000;
     
     children.each {
-    	def newTime = it.checkMotionDeactivate()
+    	def newTime = checkMotionDeactivate(it)
         if ((newTime != null) && (newTime < nextTime)) {
         	nextTime = newTime
         }
@@ -875,13 +935,6 @@ def handleMotion() {
     	log.trace "nextTime = " + nextTime
         nextTime = (nextTime >= 25) ? nextTime : 25
 		runIn((nextTime+5).toInteger(), "handleMotion")
-    }
-}
-
-def finalizeAndSendChildMessage(child) {
-	def newCommand = child?.finalizeDiskstationCommand_ChildFromParent()
-    if (newCommand != null) {
-    	sendDiskstationCommand(newCommand)
     }
 }
 
@@ -996,10 +1049,10 @@ def pollChildren(){
    	def children = getChildDevices() 
     
     children.each {
-        //log.trace "test = " + it.getRefreshState()
+        //log.trace "refreshState = " + getRefreshState(it)
     
         // step 2 - check if they are waiting to be told of their refresh
-        if (it.waitingRefresh() == true) {
+        if (waitingRefresh(it) == true) {
         	// waiting on refresh 
             if  (state.commandList.size() == 0) {
             	def childObj = it;
@@ -1011,7 +1064,7 @@ def pollChildren(){
         }
         
     	// step 1 - check if they are wanting to start a refresh
-        if (it.wantRefresh() == true) {
+        if (wantRefresh(it) == true) {
 			// do child refresh
             def childObj = it;
             def thisCamera = state.SSCameraList.find { createCameraDNI(it).toString() == childObj.deviceNetworkId.toString() }
@@ -1021,3 +1074,21 @@ def pollChildren(){
         }       
     }
 }
+
+// parent checks this to say if we want a refresh
+def wantRefresh(child) {
+	def want = (child.currentState("refreshState")?.value == "want")
+    if (want) {
+    	child.doRefreshWait()	
+    }
+    return (want)
+}
+
+def getRefreshState(child) {
+	return (child.currentState("refreshState")?.value)
+}
+
+def waitingRefresh(child) {
+	return (child.currentState("refreshState")?.value == "waiting")
+}
+
