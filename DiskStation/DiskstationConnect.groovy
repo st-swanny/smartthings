@@ -225,7 +225,7 @@ def getDSInfo() {
     queueDiskstationCommand("SYNO.API.Info", "Query", "query=SYNO.SurveillanceStation.ExternalRecording", 1)
 
     // login
-    queueDiskstationCommand("SYNO.API.Auth", "Login", "account=${username}&passwd=${password}&session=SurveillanceStation&format=sid", 2)
+    queueDiskstationCommand("SYNO.API.Auth", "Login", "account=${URLEncoder.encode(username, "UTF-8")}&passwd=${URLEncoder.encode(password, "UTF-8")}&session=SurveillanceStation&format=sid", 2)
 
     // get cameras
     queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "List", "additional=device", 1)
@@ -761,7 +761,8 @@ def createDiskstationURL(Map commandData) {
         }
         
         if ((state.api.get(commandData.api)?.minVersion <= commandData.version) && (state.api.get(commandData.api)?.maxVersion >= commandData.version)) {
-        	return "/webapi/${apipath}?api=${commandData.api}&method=${commandData.command}&version=${commandData.version}${session}&${commandData.params}"
+        	def url = "/webapi/${apipath}?api=${commandData.api}&method=${commandData.command}&version=${commandData.version}${session}&${commandData.params}"
+            return url
        	} else {
         	log.trace "need a higher DS api version"
         }
@@ -781,18 +782,22 @@ def createHubAction(Map commandData) {
 
     try {
         def url = createDiskstationURL(commandData)
-        def acceptType = "application/json, text/plain, text/html, */*"
-        if (commandData.acceptType) {
-        	acceptType = commandData.acceptType
-        }
+        if (url != null) {
+            def acceptType = "application/json, text/plain, text/html, */*"
+            if (commandData.acceptType) {
+                acceptType = commandData.acceptType
+            }
 
-        def hubaction = new physicalgraph.device.HubAction(
-            """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: ${acceptType}\r\n\r\n""", 
-            physicalgraph.device.Protocol.LAN, "${deviceNetworkId}")
-        if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
-            hubaction.options = [outputMsgToS3:true]
+            def hubaction = new physicalgraph.device.HubAction(
+                """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: ${acceptType}\r\n\r\n""", 
+                physicalgraph.device.Protocol.LAN, "${deviceNetworkId}")
+            if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
+                hubaction.options = [outputMsgToS3:true]
+            }
+            return hubaction   
+        } else {
+        	return null
         }
-        return hubaction        
     }
     catch (Exception err) {
         log.debug "error sending message: " + err
