@@ -45,6 +45,7 @@ mappings {
 
 def handleUrlCallback () {
 	log.trace "url callback"
+    debugEvent ("url callback: $params", true)
     
     def id = params.id.toInteger()
     def type = params.type
@@ -61,10 +62,10 @@ def handleUrlCallback () {
         	switch (type) {
             	case "oor": data = [presence: "not present"]; break
                 case "back_in_range": data = [presence: "present"]; break
-                case "motion_detected": data = [acceleration: "active"]; startMotionTimer(d); break
+                case "motion_detected": data = [acceleration: "active", motion: "active"]; startMotionTimer(d); break
                 
                 // motion timeout callback is not working currently in WST 
-                // case "motion_timedout": data = [acceleration: "inactive"]; break
+                // case "motion_timedout": data = [acceleration: "inactive", motion: "inactive"]; break
                 
                 case "door_opened": data = [contact: "open"]; break
                 case "door_closed": data = [contact: "closed"]; break
@@ -431,6 +432,7 @@ def updateDeviceStatus(def device, def d) {
         humidity: (device.cap).toDouble().round(),
         contact : (tagEventStates[device.eventState] == "Opened") ? "open" : "closed",
         acceleration  : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive",
+        motion : (tagEventStates[device.eventState] == "Moved") ? "active" : "inactive",
         water : (device.shorted == true) ? "wet" : "dry" 
     ]
     d.generateEvent(data)
@@ -709,7 +711,7 @@ def resMotionDetection(def child) {
 	log.trace "turning off motion"
     
     // now turn off in device
-    def data = [acceleration: "inactive"]
+    def data = [acceleration: "inactive", motion: "inactive"]
     child.generateEvent(data)
     
     return null

@@ -17,6 +17,7 @@ metadata {
 	definition (name: "Wireless Tag Motion", namespace: "swanny", author: "swanny") {
 		capability "Presence Sensor"
 		capability "Acceleration Sensor"
+        capability "Motion Sensor"
 		capability "Tone"
 		capability "Relative Humidity Measurement"
 		capability "Temperature Measurement"
@@ -46,6 +47,10 @@ metadata {
 		standardTile("acceleration", "device.acceleration") {
 			state("active", label:'${name}', icon:"st.motion.acceleration.active", backgroundColor:"#53a7c0")
 			state("inactive", label:'${name}', icon:"st.motion.acceleration.inactive", backgroundColor:"#ffffff")
+		}
+        standardTile("motion", "device.motion") {
+			state("active", label:'${name}', icon:"st.motion.motion.active", backgroundColor:"#53a7c0")
+			state("inactive", label:'${name}', icon:"st.motion.motion.inactive", backgroundColor:"#ffffff")
 		}
 		valueTile("temperature", "device.temperature") {
 			state("temperature", label:'${currentValue}°',
@@ -98,8 +103,8 @@ metadata {
 		valueTile("setdoorclosed", "device.temperature", inactiveLabel: false, decoration: "flat") {
 			state "default", label:'Arm & Set Door Closed Position', action:"setDoorClosedPosition", nextState: "default"
 		}
-		main(["temperature", "acceleration", "presence", "humidity", "contact"])
-		details(["temperature", "presence", "humidity", "acceleration", "contact", "button", "beep", "refresh", "type", "doorClosed", "setdoorclosed", "rssi", "battery"])
+		main(["temperature", "acceleration", "motion", "presence", "humidity", "contact"])
+		details(["temperature", "presence", "humidity", "acceleration", "motion", "contact", "button", "refresh", "type", "doorClosed", "setdoorclosed", "beep", "rssi", "battery"])
 	}
     
     preferences {
@@ -216,3 +221,4 @@ def getTemperature(value) {
 		return celsiusToFahrenheit(celsius) as Integer
 	}
 }
+
