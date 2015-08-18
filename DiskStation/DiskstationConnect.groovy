@@ -146,16 +146,9 @@ def cameraDiscovery()
 		getDSInfo()
     }
     
-    if (state.getCameraCapabilities) {    	
-        state.getCameraCapabilities = false;
-        state.cameraCapabilities = [:]
-        state.cameraPresets = []
-        state.cameraPatrols = []
-        
-        state.SSCameraList.each {
-        	updateCameraInfo(it)     	
-        }
-    }
+    //if (state.getCameraCapabilities) {    	
+	//	getCameraCapabilities()
+    //}
 
 	// check for timeout error
     state.refreshCount = state.refreshCount+1
@@ -225,10 +218,25 @@ def getDSInfo() {
     queueDiskstationCommand("SYNO.API.Info", "Query", "query=SYNO.SurveillanceStation.ExternalRecording", 1)
 
     // login
-    queueDiskstationCommand("SYNO.API.Auth", "Login", "account=${URLEncoder.encode(username, "UTF-8")}&passwd=${URLEncoder.encode(password, "UTF-8")}&session=SurveillanceStation&format=sid", 2)
+    executeLoginCommand()
 
     // get cameras
     queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "List", "additional=device", 1)
+}
+
+def executeLoginCommand() {
+	queueDiskstationCommand("SYNO.API.Auth", "Login", "account=${URLEncoder.encode(username, "UTF-8")}&passwd=${URLEncoder.encode(password, "UTF-8")}&session=SurveillanceStation&format=sid", 2)
+}
+
+def getCameraCapabilities() {
+    state.getCameraCapabilities = false;
+    state.cameraCapabilities = [:]
+    state.cameraPresets = []
+    state.cameraPatrols = []
+
+    state.SSCameraList.each {
+        updateCameraInfo(it)     	
+    }
 }
 
 // takes in object from state.SSCameraList
@@ -416,35 +424,36 @@ def locationHandler(evt) {
             	log.trace bodyString
                 body = new groovy.json.JsonSlurper().parseText(bodyString)
             } else if (type?.contains("text/html")) {
-                body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))
                 log.trace bodyString
-                if (body.error) {   
-                    if (state.commandList.size() > 0) {
-                        Map commandData = state.commandList?.first()
-                        // should we generate an error for this type or ignore
-                        if ((getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"))
-                            || (getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol")))
-                        {
-                            // ignore
-                            body.data = null
-                        } else {
-                            // don't ignore
-                            handleErrors(commandData)
-                            return
-                        }
-                    } else {
-                    	// error on a command we don't care about
-                    	return
-                    }
-                }
+                body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))                
             } else {
                 // unexpected data type
                 if (state.commandList.size() > 0) {
                 	log.trace "unexpected data type"
                 	Map commandData = state.commandList.first()
-                	handleErrors(commandData)
+                	handleErrors(commandData, null)
                 }
                 return
+            }
+            if (body.error) {   
+                if (state.commandList.size() > 0) {
+                    Map commandData = state.commandList?.first()
+                    // should we generate an error for this type or ignore
+                    if ((getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"))
+                        || (getUniqueCommand(commandData) == getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPatrol")))
+                    {
+                        // ignore
+                        body.data = null
+                    } else {
+                        // don't ignore
+                        handleErrors(commandData, body.error)
+                        return
+                    }
+                } else {
+                    // error on a command we don't care about
+                    handleErrorsIgnore(null, body.error)
+                    return
+                }
             }
    		}
         
@@ -478,6 +487,7 @@ def locationHandler(evt) {
                             case getUniqueCommand("SYNO.SurveillanceStation.Camera", "List"):
                             	state.SSCameraList = body.data.cameras
                             	state.getCameraCapabilities = true;
+                                getCameraCapabilities()
                             	break
                             case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapability"):
                             	// vendor=TRENDNet&model=TV-IP751WC
@@ -563,7 +573,7 @@ def locationHandler(evt) {
                     case getUniqueCommand("SYNO.API.Auth", "Login"):
                     case getUniqueCommand("SYNO.SurveillanceStation.Camera", "List"):
                     case getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetCapability"):
-                    	handleErrors(commandData)
+                    	handleErrors(commandData, null)
                     	break
                     case getUniqueCommand("SYNO.SurveillanceStation.PTZ", "ListPreset"):
                     	def cameraId = (commandData.params =~ /cameraId=([0-9]+)/) ? (commandData.params =~ /cameraId=([0-9]+)/)[0][1] : null
@@ -592,18 +602,44 @@ def locationHandler(evt) {
    	}
 }
 
-def handleErrors(commandData) {
-    switch (getUniqueCommand(commandData)) {
-        case getUniqueCommand("SYNO.API.Info", "Query"):
-        state.error = "Network Error. Check your ip address and port. You must access a local IP address and a non-https port."
-        break
-            case getUniqueCommand("SYNO.API.Auth", "Login"):
-        state.error = "Login Error. Login failed. Check your login credentials."
-        break
-            default:
-            state.error = "Error communicating with the Diskstation. Please check your settings and network connection. API = " + commandData.api + " command = " + commandData.command
-        break
+def handleErrors(commandData, errorData) {
+	if (!state.SSCameraList) {
+    	// error while starting up
+        switch (getUniqueCommand(commandData)) {
+            case getUniqueCommand("SYNO.API.Info", "Query"):
+            state.error = "Network Error. Check your ip address and port. You must access a local IP address and a non-https port."
+            break
+                case getUniqueCommand("SYNO.API.Auth", "Login"):
+            state.error = "Login Error. Login failed. Check your login credentials."
+            break
+                default:
+                state.error = "Error communicating with the Diskstation. Please check your settings and network connection. API = " + commandData.api + " command = " + commandData.command
+            break
+      	}
+    } else {
+    	// error later on
+        checkForRedoLogin(commandData, errorData)
+    }	
+}
+
+def checkForRedoLogin(commandData, errorData) {
+	if (errorData != null) {
+        log.trace errorData
+        if (errorData?.code == 102 || errorData?.code == 105) {
+            log.trace "relogging in"
+			executeLoginCommand()
+        } else {
+        	if (commandData) {
+            	state.error = "Error communicating with the Diskstation. Please check your settings and network connection. API = " + commandData.api + " command = " + commandData.command
+        	} else {
+            	state.error = "Error communicating with the Diskstation. Please check your settings and network connection."
             }
+        }
+    }
+}
+
+def handleErrorsIgnore(commandData, errorData) {
+	checkForRedoLogin(commandData, errorData)
 }
 
 private def parseEventMessage(Map event) {
@@ -890,8 +926,7 @@ def webNotifyCallback() {
                         d.motionActivated()
                         if (d.currentValue("autoTake") == "on") {
                             log.trace "taking motion image for child"
-                            def commandData = d.take()
-                            sendDiskstationCommand(commandData)
+                            d.take()
                         }
                         handleMotion()
                     }
@@ -904,6 +939,7 @@ def webNotifyCallback() {
 def checkMotionDeactivate(child) {
 	def timeRemaining = null
     def cameraDNI = child.deviceNetworkId
+    log.debug "checkMotionDeactivate ${cameraDNI} start"
     
     try {
         def delay = (motionOffDelay) ? motionOffDelay : 5
@@ -916,11 +952,15 @@ def checkMotionDeactivate(child) {
     	timeRemaining = 0
     }
     
+    log.debug "checkMotionDeactivate ${cameraDNI} timeRemaining = ${timeRemaining}"
+    
     // we can end motion early to avoid unresponsiveness later
     if ((timeRemaining != null) && (timeRemaining < 15)) {
+    	log.debug "checkMotionDeactivate ${cameraDNI} deactivate"
 		child.motionDeactivate()
         state.lastMotion[cameraDNI] = null
-        timeRemaining = null
+        timeRemaining = null        
+    	log.debug "checkMotionDeactivate ${cameraDNI} deactivated"
     }
     return timeRemaining
 }
@@ -928,6 +968,7 @@ def checkMotionDeactivate(child) {
 def handleMotion() {
 	def children = getChildDevices()
     def nextTime = 1000000;
+    log.debug "handleMotion"
     
     children.each {
     	def newTime = checkMotionDeactivate(it)
@@ -936,6 +977,7 @@ def handleMotion() {
         }
     }
 
+	log.debug "handleMotion nextTime = ${nextTime}"
 	if ((nextTime != 1000000)){
     	log.trace "nextTime = " + nextTime
         nextTime = (nextTime >= 25) ? nextTime : 25
