@@ -266,7 +266,7 @@ def oauthInitUrl()
 def buildRedirectUrl()
 {
 	log.debug "buildRedirectUrl"
-	return serverUrl + "/api/token/${atomicState.accessToken}/smartapps/installations/${app.id}/swapToken"
+	return apiServerUrl("/api/token/${atomicState.accessToken}/smartapps/installations/${app.id}/swapToken")
 }
 
 def swapToken()
@@ -578,7 +578,7 @@ def setSingleCallback(def tag, Map callback, def type) {
             }
         	break;    }
     
-    String callbackString = """{"url":"${serverUrl}/api/token/${atomicState.accessToken}/smartapps/installations/${app.id}/urlcallback${parameters}","verb":"GET","content":"","disabled":false,"nat":false}"""
+    String callbackString = """{"url":"${getApiServerUrl()}/api/token/${atomicState.accessToken}/smartapps/installations/${app.id}/urlcallback${parameters}","verb":"GET","content":"","disabled":false,"nat":false}"""
     return callbackString
 }
 
@@ -874,7 +874,6 @@ def toQueryString(Map m)
 	return m.collect { k, v -> "${k}=${URLEncoder.encode(v.toString())}" }.sort().join("&")
 }
 
-def getServerUrl() { return "https://graph.api.smartthings.com" }
 def getSmartThingsClientId() { "67953bd9-8adf-422a-a7f0-5dbf256b9024" }
 
 def debugEvent(message, displayEvent) {

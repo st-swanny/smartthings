@@ -52,7 +52,7 @@ def motionSetup()
     	createAccessToken() 
     }
 
-	def url = "https://graph.api.smartthings.com/api/token/${state.accessToken}/smartapps/installations/${app.id}/DSNotify?user=user&password=pass&to=num&msg=Hello+World"
+	def url = apiServerUrl("/api/token/${state.accessToken}/smartapps/installations/${app.id}/DSNotify?user=user&password=pass&to=num&msg=Hello+World")
     
     if (state.motionTested == false) {    
         return dynamicPage(name:"motionSetup", title:"Motion Detection Triggers", nextPage:"", refreshInterval:interval, install: true, uninstall: true){        
