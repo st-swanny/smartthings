@@ -424,7 +424,7 @@ def updateDeviceStatus(def device, def d) {
     // parsing data here
     def data = [
         tagType: convertTagTypeToString(device),
-        temperature: device.temperature.toDouble().round(),
+        temperature: device.temperature.toDouble().round(1),
         rssi: ((Math.max(Math.min(device.signaldBm, -60),-100)+100)*100/40).toDouble().round(),
         presence: ((device.OutOfRange == true) ? "not present" : "present"),
         battery: (device.batteryVolt*100/3).toDouble().round(),
