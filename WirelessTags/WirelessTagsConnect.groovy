@@ -147,7 +147,11 @@ def wirelessDeviceList()
         }
         section("Optional Settings", hidden: true, hideable: true) {
             input "pollTimer", "number", title:"Minutes between poll updates of the sensors", defaultValue:5
-        } 
+        }
+        section([mobileOnly:true]) {
+        	paragraph "If you have more than 5 or 6 sensors, you may need to create multiple instances of this SmartApp with only about 5 devices selected in each instance. Use a unique name here to create multiple apps."
+			label title: "Assign a name for this SmartApp instance (optional)", required: false
+		}
 	}
 
 	return p
