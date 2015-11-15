@@ -1022,11 +1022,11 @@ def getPresetId(childDevice, index) {
 def getPresetString(childDevice, index) {
 	def childId = getDSCameraIDbyChild(childDevice)
     if ((childId != null) && (childId <= state.cameraPresets.size())) {
-    	if (index <= state.cameraPresets[childId]?.size()) {
+    	if ((index > 0) && (index <= state.cameraPresets[childId]?.size())) {
         	return state.cameraPresets[childId][index-1]?.name
         }
     } 
-    return "0"
+    return "N/A"
 }
 
 def getPresetIdByString(childDevice, name) {
@@ -1059,11 +1059,11 @@ def getPatrolId(childDevice, index) {
 def getPatrolString(childDevice, index) {
 	def childId = getDSCameraIDbyChild(childDevice)
     if ((childId != null) && (childId <= state.cameraPatrols.size())) {
-    	if (index <= state.cameraPatrols[childId]?.size()) {
+    	if ((index > 0) && (index <= state.cameraPatrols[childId]?.size())) {
         	return state.cameraPatrols[childId][index-1]?.name
         }
     }   
-    return "0"
+    return "N/A"
 }
 
 def getPatrolIdByString(childDevice, name) {
