@@ -214,9 +214,15 @@ def getCameraID() {
 
 // handle commands
 def take() {
-	log.trace "take picture"    
-    def lastNum = device.currentState("takeImage")?.integerValue 
-    sendEvent(name: "takeImage", value: "${lastNum+1}")
+	log.trace "take picture"   
+    try {
+    	def lastNum = device.currentState("takeImage")?.integerValue 
+    	sendEvent(name: "takeImage", value: "${lastNum+1}")
+    }
+	catch(Exception e) {
+		log.error e
+        sendEvent(name: "takeImage", value: "0")
+	}
     def cameraId = getCameraID()
     def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}", 1)    
     hubAction
