@@ -172,6 +172,12 @@ metadata {
             "left", "home", "right", 
             "refresh", "down", "auto"])
 	}   
+    
+    preferences {
+       input "takeStream", "number", title: "Stream to capture image from",
+              description: "Leave blank unless want to use another stream.", defaultValue: "",
+              required: false, displayDuringSetup: true
+    }
 }
 
 // parse events into attributes
@@ -213,8 +219,7 @@ def getCameraID() {
 }
 
 // handle commands
-def take() {
-	log.trace "take picture"   
+def take() { 
     try {
     	def lastNum = device.currentState("takeImage")?.integerValue 
     	sendEvent(name: "takeImage", value: "${lastNum+1}")
@@ -223,8 +228,16 @@ def take() {
 		log.error e
         sendEvent(name: "takeImage", value: "0")
 	}
+    def hubAction = null
     def cameraId = getCameraID()
-    def hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}", 1)    
+    if ((takeStream != null) && (takeStream != "")){
+    	log.trace "take picture from stream ${takeStream}"  
+    	hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}&camStm=${takeStream}", 4)    
+    }
+    else { 
+    	log.trace "take picture no stream" 
+    	hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}", 1)    
+    }
     hubAction
 }
 
