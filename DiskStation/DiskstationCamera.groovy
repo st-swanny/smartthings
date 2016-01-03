@@ -231,13 +231,14 @@ def take() {
     def hubAction = null
     def cameraId = getCameraID()
     if ((takeStream != null) && (takeStream != "")){
-    	log.trace "take picture from stream ${takeStream}"  
+    	log.trace "take picture from camera ${cameraId} stream ${takeStream}"  
     	hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}&camStm=${takeStream}", 4)    
     }
     else { 
-    	log.trace "take picture no stream" 
+    	log.trace "take picture from camera ${cameraId} default stream" 
     	hubAction = queueDiskstationCommand_Child("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${cameraId}", 1)    
     }
+    log.debug "take command is: ${hubAction}"
     hubAction
 }
 

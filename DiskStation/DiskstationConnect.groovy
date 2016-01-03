@@ -596,6 +596,23 @@ def locationHandler(evt) {
             	// if we get here, we likely just had a success for a message we don't care about
             }
         }
+       
+        // is this an empty GetSnapshot error?
+        if (parsedEvent.requestId && !parsedEvent.headers) {
+        	def commandInfo = getFirstChildCommand(getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot"))
+            if (commandInfo) {
+                log.trace "take image command returned an error"                
+                if ((state.lastErrorResend == null) || ((now() - state.lastErrorResend) > 15000)) {
+                	log.trace "resending to get real error message"
+                	state.lastErrorResend = now()
+                    state.doSnapshotResend = true
+                    sendDiskstationCommand(createCommandData("SYNO.SurveillanceStation.Camera", "GetSnapshot", "cameraId=${getDSCameraIDbyChild(commandInfo.child)}", 1))                    
+                } else {
+                	log.trace "not trying to resend again for more error info until later"
+                }
+                return 
+            }
+        }
         
         // why are we here?
         log.trace "Did not use " + bodyString
@@ -603,6 +620,10 @@ def locationHandler(evt) {
 }
 
 def handleErrors(commandData, errorData) {
+	if (errorData) { 
+    	log.trace "trying to handle error ${errorData}"
+    }
+    
 	if (!state.SSCameraList) {
     	// error while starting up
         switch (getUniqueCommand(commandData)) {
@@ -639,7 +660,10 @@ def checkForRedoLogin(commandData, errorData) {
 }
 
 def handleErrorsIgnore(commandData, errorData) {
-	checkForRedoLogin(commandData, errorData)
+	if (errorData) { 
+    	log.trace "trying to handle error ${errorData}"
+    }
+    checkForRedoLogin(commandData, errorData)
 }
 
 private def parseEventMessage(Map event) {
@@ -693,6 +717,13 @@ private def parseEventMessage(String description) {
 			def valueString = part.trim()
 			if (valueString) {
 				event.body = valueString
+			}
+		}
+        else if (part.startsWith('requestId')) {
+			part -= "requestId:"
+			def valueString = part.trim()
+			if (valueString) {
+				event.requestId = valueString
 			}
 		}
 	}
@@ -828,7 +859,11 @@ def createHubAction(Map commandData) {
                 """GET ${url} HTTP/1.1\r\nHOST: ${ip}\r\nAccept: ${acceptType}\r\n\r\n""", 
                 physicalgraph.device.Protocol.LAN, "${deviceNetworkId}")
             if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
-                hubaction.options = [outputMsgToS3:true]
+            	if (state.doSnapshotResend) {
+                	state.doSnapshotResend = false
+                } else {
+                	hubaction.options = [outputMsgToS3:true]
+                }
             }
             return hubaction   
         } else {
@@ -1138,4 +1173,3 @@ def getRefreshState(child) {
 def waitingRefresh(child) {
 	return (child.currentState("refreshState")?.value == "waiting")
 }
-
