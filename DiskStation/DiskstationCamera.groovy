@@ -198,8 +198,9 @@ def putImageInS3(map) {
 			def bytes = new ByteArrayInputStream(s3ObjectContent.bytes)
 			storeImage(picName, bytes)
             log.trace "image stored = " + picName
-		}
-        
+		} else {
+        	log.error "error getting image " + picName
+        }
 	}
 	catch(Exception e) {
 		log.error e

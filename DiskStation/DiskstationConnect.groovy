@@ -401,12 +401,12 @@ def locationHandler(evt) {
 
 	def parsedEvent = parseEventMessage(description)
 	parsedEvent << ["hub":hub]   
-    
+        
     if ((parsedEvent.ip == convertIPtoHex(userip)) && (parsedEvent.port == convertPortToHex(userport)))
     {
     	def bodyString = ""
         def body = null
-        
+                
         if (hub) { state.hub = hub }
 
         if (parsedEvent.headers && parsedEvent.body)
@@ -428,8 +428,8 @@ def locationHandler(evt) {
                 body = new groovy.json.JsonSlurper().parseText(bodyString.replaceAll("\\<.*?\\>", ""))                
             } else {
                 // unexpected data type
+                log.trace "unexpected data type"
                 if (state.commandList.size() > 0) {
-                	log.trace "unexpected data type"
                 	Map commandData = state.commandList.first()
                 	handleErrors(commandData, null)
                 }
@@ -544,6 +544,8 @@ def locationHandler(evt) {
         // is this a child message?
         
         if (commandType != "") {
+        	log.trace "event = ${description}"
+        
             // see who wants this type (commandType)        
             def commandInfo = getFirstChildCommand(commandType)
 
@@ -892,7 +894,7 @@ def createCommandData(String api, String command, String params, int version) {
     commandData.put('time', now())
     
     if (getUniqueCommand("SYNO.SurveillanceStation.Camera", "GetSnapshot") == getUniqueCommand(commandData)) {
-		commandData.put('acceptType', "*/*");
+		commandData.put('acceptType', "image/jpeg");
     }
     
     return commandData
