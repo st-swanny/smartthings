@@ -77,10 +77,11 @@ def motionSetup()
                 paragraph "10. Type 'user' for the Username, 'password' in both Password fields"
                 paragraph "11. Type 123-4567890 for the first phone number"
                 paragraph "12. Press 'Send a test SMS message' to update this screen"
-                paragraph "13. Now click on the Advanced tab in the Nofications window"
-                paragraph "14. Go to Camera on the left side of this pane and then click Motion Detected"
-                paragraph "15. Choose 'Edit' and 'Edit' on the top left of the pane"
-                paragraph "16. Select SMS as the Notification Type"
+                paragraph "13. Now click on the Settings tab in the Nofications window"
+                paragraph "14. Go to the Camera section of this pane and then check SMS for Motion Detected"
+                paragraph "15. With the Motion Detected row highlighted, choose Edit and then Edit Notification from the top left of this pane"
+                paragraph "16. Put the following text into the Subject line and choose Save"
+                input "ignore2", "text", title:"", defaultValue:"Camera %CAMERA% on %SS_PKG_NAME% has detected motion"
                 paragraph "If the page does not say 'success' within 10-15 seconds after sending the test message, " +
                 		  "go to the previous page and come back to refresh the screen again. If you still don't have " +
                           "the success message, retrace these steps."
@@ -941,7 +942,8 @@ private def clearDiskstationCommandQueue() {
 }
 
 def webNotifyCallback() {
-	//log.trace "get: " + params
+	log.trace "motion callback"
+    
     if (params?.msg?.contains("Test message from Synology")) {
     	state.motionTested = true
         log.debug "Test message received"
@@ -976,7 +978,6 @@ def webNotifyCallback() {
 def checkMotionDeactivate(child) {
 	def timeRemaining = null
     def cameraDNI = child.deviceNetworkId
-    log.debug "checkMotionDeactivate ${cameraDNI} start"
     
     try {
         def delay = (motionOffDelay) ? motionOffDelay : 5
@@ -993,7 +994,6 @@ def checkMotionDeactivate(child) {
     
     // we can end motion early to avoid unresponsiveness later
     if ((timeRemaining != null) && (timeRemaining < 15)) {
-    	log.debug "checkMotionDeactivate ${cameraDNI} deactivate"
 		child.motionDeactivate()
         state.lastMotion[cameraDNI] = null
         timeRemaining = null        
