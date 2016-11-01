@@ -189,17 +189,20 @@ def putImageInS3(map) {
 	def s3ObjectContent
 
 	try {
-		def imageBytes = getS3Object(map.bucket, map.key + ".jpg")
+		def s3Object = getS3Object(map.bucket, map.key + ".jpg")
         
-		if(imageBytes)
+		if(s3Object)
 		{
+        	// ILLEGAL METHOD CALL??? WTF
+        	//log.trace "s3Object size " + s3Object.getObjectMetadata()?.getContentLength()
         	def picName = getPictureName()
-			s3ObjectContent = imageBytes.getObjectContent()
+			s3ObjectContent = s3Object.getObjectContent()
 			def bytes = new ByteArrayInputStream(s3ObjectContent.bytes)
 			storeImage(picName, bytes)
             log.trace "image stored = " + picName
-		}
-        
+        } else {
+        	log.trace "The image (" + picName + ") is missing"
+        }        
 	}
 	catch(Exception e) {
 		log.error e
@@ -228,6 +231,7 @@ def take() {
 		log.error e
         sendEvent(name: "takeImage", value: "0")
 	}
+    
     def hubAction = null
     def cameraId = getCameraID()
     if ((takeStream != null) && (takeStream != "")){
@@ -416,11 +420,15 @@ def recordEventFailure() {
 
 def motionActivated() {
     if (device.currentState("motion")?.value != "active") {
+    	log.trace "activate"
         sendEvent(name: "motion", value: "active")
+    } else {
+    	log.trace "motion detected, already active, not sending an event"
     }
 }
 
 def motionDeactivate() {
+	log.trace "deactivate"
 	sendEvent(name: "motion", value: "inactive")
 }
 
@@ -482,6 +490,10 @@ def queueDiskstationCommand_Child(String api, String command, String params, int
 
 //helper methods
 private getPictureName() {
-	def pictureUuid = java.util.UUID.randomUUID().toString().replaceAll('-', '')
-	return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureUuid" + ".jpg"
+    def lastNum = device.currentState("takeImage")?.integerValue ?: 0 
+	
+    Date rightNow = new Date()
+    def pictureDate = rightNow.toString().replaceAll(" ", "_").replaceAll(":", "")
+    
+    return device.deviceNetworkId.replaceAll(" ", "_") + "_$pictureDate" + "_" + lastNum + ".jpg"
 }
