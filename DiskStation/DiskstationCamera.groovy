@@ -186,27 +186,13 @@ def parse(String description) {
 }
 
 def putImageInS3(map) {
-	def s3ObjectContent
-
 	try {
-		def imageBytes = getS3Object(map.bucket, map.key + ".jpg")
-        
-		if(imageBytes)
-		{
-        	def picName = getPictureName()
-			s3ObjectContent = imageBytes.getObjectContent()
-			def bytes = new ByteArrayInputStream(s3ObjectContent.bytes)
-			storeImage(picName, bytes)
-            log.trace "image stored = " + picName
+		def picName = getPictureName()
+		storeTemporaryImage(map.key, picName)
+	    log.trace "image stored = " + picName
 		}
-        
-	}
 	catch(Exception e) {
 		log.error e
-	}
-	finally {
-		//explicitly close the stream
-		if (s3ObjectContent) { s3ObjectContent.close() }
 	}
 }
 
