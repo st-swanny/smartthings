@@ -222,7 +222,7 @@ def getDSInfo() {
     executeLoginCommand()
 
     // get cameras
-    queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "List", "additional=device", 1)
+    queueDiskstationCommand("SYNO.SurveillanceStation.Camera", "List", "additional=device&basic=true", 8)
 }
 
 def executeLoginCommand() {
